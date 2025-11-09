@@ -5,5 +5,4 @@ numpy
 scikit-learn
 xgboost
 deep-translator
-soundfile
-scipy
+pydub
