@@ -1,8 +1,8 @@
 import streamlit as st
 import joblib
-import librosa
 import numpy as np
 import io
+import soundfile as sf
 from deep_translator import GoogleTranslator
 import time
 
@@ -17,11 +17,11 @@ st.markdown(f"""
         color: #000000 !important;
     }}
     .overlay {{
-        background: rgba(255, 255, 255, 0.85);
+        background: rgba(255, 255, 255, 0.88);
         position: fixed;
         top: 0; left: 0; right: 0; bottom: 0;
         z-index: -1;
-        backdrop-filter: blur(5px);
+        backdrop-filter: blur(6px);
     }}
     .title {{
         font-size: 3.8rem;
@@ -29,7 +29,6 @@ st.markdown(f"""
         text-align: center;
         margin: 2rem 0;
         color: #1a1a1a !important;
-        text-shadow: none;
     }}
     .subtitle {{
         text-align: center;
@@ -52,20 +51,13 @@ st.markdown(f"""
     .stMetric {{
         background: #ffffff;
         border-radius: 12px;
-        padding: 1rem;
+        padding: 1.2rem;
         box-shadow: 0 4px 10px rgba(0,0,0,0.1);
         text-align: center;
     }}
     .stMetric > div:first-child {{
         color: #007acc !important;
         font-weight: bold;
-    }}
-    .stSpinner > div {{
-        color: #007acc !important;
-    }}
-    .stError, .stSuccess, .stInfo {{
-        border-radius: 12px;
-        padding: 1rem;
     }}
 </style>
 <div class="overlay"></div>
@@ -92,24 +84,51 @@ model, scaler, selector, threshold = load_model()
 def get_translator(target='en'):
     return GoogleTranslator(source='auto', target=target)
 
-# === FIXED AUDIO LOADER (NO FORMAT ERROR) ===
+# === AUDIO LOADER (FIXED — ALL FORMATS) ===
 def load_audio(file):
     try:
-        # Read and reset pointer
-        audio_bytes = file.read()
-        audio_io = io.BytesIO(audio_bytes)
-        audio_io.seek(0)  # CRITICAL: Reset pointer
+        # Read file
+        file_bytes = file.read()
+        file_io = io.BytesIO(file_bytes)
+        file_io.seek(0)
 
-        # Let librosa auto-detect format
-        y, sr = librosa.load(audio_io, sr=22050, mono=True)
-        return y[:sr*5], sr  # First 5 seconds
+        # Detect format from extension
+        file_name = file.name.lower()
+        if file_name.endswith('.wav'):
+            fmt = 'WAV'
+        elif file_name.endswith('.mp3'):
+            fmt = 'MP3'
+        elif file_name.endswith('.m4a'):
+            fmt = 'M4A'
+        elif file_name.endswith('.ogg'):
+            fmt = 'OGG'
+        elif file_name.endswith('.flac'):
+            fmt = 'FLAC'
+        elif file_name.endswith('.amr'):
+            fmt = 'AMR'
+        else:
+            fmt = None
+
+        # Use soundfile (supports all via ffmpeg backend)
+        y, sr = sf.read(file_io, format=fmt)
+        y = y.astype(np.float32)
+        if len(y.shape) > 1:
+            y = y.mean(axis=1)  # Convert to mono
+        if sr != 22050:
+            # Resample manually if needed (soundfile doesn't resample)
+            from scipy.signal import resample
+            num_samples = int(len(y) * 22050 / sr)
+            y = resample(y, num_samples)
+            sr = 22050
+        return y[:22050*5], 22050  # 5 seconds
     except Exception as e:
         st.error(f"Audio loading failed: {e}")
-        st.info("Supported formats: WAV, MP3, M4A, OGG, FLAC, AMR")
+        st.info("Supported: WAV, MP3, M4A, OGG, FLAC, AMR")
         return None, None
 
 # === FEATURE EXTRACTION ===
 def extract_features(y, sr):
+    import librosa
     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
     zcr = librosa.feature.zero_crossing_rate(y)[0]
     rms = librosa.feature.rms(y=y)[0]
@@ -175,4 +194,3 @@ if audio and model:
 
 else:
     st.info(t("Upload your voice recording to begin."))
-    st.markdown("<br><br>", unsafe_allow_html=True)
