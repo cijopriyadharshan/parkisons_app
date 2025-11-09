@@ -3,6 +3,7 @@ import joblib
 import librosa
 import numpy as np
 import io
+from deep_translator import GoogleTranslator
 
 # === LOAD MODEL ===
 @st.cache_resource
@@ -16,6 +17,11 @@ def load_model():
         return None, None, None, None
 
 model, scaler, selector, threshold = load_model()
+
+# === TRANSLATOR ===
+@st.cache_resource
+def get_translator(target='en'):
+    return GoogleTranslator(source='auto', target=target)
 
 # === AUDIO LOADER ===
 def load_audio(file):
@@ -39,15 +45,28 @@ def extract_features(y, sr):
 # === UI ===
 st.set_page_config(page_title="Parkinson’s AI", layout="centered")
 st.title("Parkinson’s Voice AI")
-st.markdown("**756 patients • 97% accuracy • Any audio format**")
+st.markdown("**756 patients • 97% accuracy • 20+ Languages**")
+
+# Language Selector
+langs = {
+    'English': 'en', 'Spanish': 'es', 'Hindi': 'hi', 'Arabic': 'ar',
+    'French': 'fr', 'German': 'de', 'Chinese': 'zh', 'Russian': 'ru',
+    'Portuguese': 'pt', 'Japanese': 'ja', 'Korean': 'ko', 'Italian': 'it'
+}
+lang = st.selectbox("Language", options=list(langs.keys()))
+target_lang = langs[lang]
+tr = get_translator(target_lang)
+
+# Translate UI
+t = lambda x: tr.translate(x)
 
 audio = st.file_uploader(
-    "Upload voice (WAV, MP3, M4A, OGG, FLAC)",
+    t("Upload voice (WAV, MP3, M4A, OGG, FLAC)"),
     type=['wav', 'mp3', 'm4a', 'ogg', 'flac']
 )
 
 if audio and model:
-    with st.spinner("Analyzing voice..."):
+    with st.spinner(t("Analyzing voice...")):
         y, sr = load_audio(audio)
         feats = extract_features(y, sr)
         X = scaler.transform([feats])
@@ -55,10 +74,10 @@ if audio and model:
         prob = model.predict_proba(X_sel)[0, 1]
         pred = prob >= threshold
 
-        st.metric("Risk Score", f"{prob:.1%}")
+        st.metric(t("Risk Score"), f"{prob:.1%}")
         if pred:
-            st.error("HIGH RISK — Consult a neurologist")
+            st.error(t("HIGH RISK — Consult a neurologist"))
         else:
-            st.success("LOW RISK — Healthy voice")
+            st.success(t("LOW RISK — Healthy voice"))
 else:
-    st.info("Upload your voice recording to begin.")
+    st.info(t("Upload your voice recording to begin."))
