@@ -1,8 +1,7 @@
-
 streamlit
 joblib
 librosa
 numpy
 scikit-learn
 xgboost
-googletrans-py==4.0.0-8
+deep-translator
