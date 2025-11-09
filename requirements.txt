@@ -1,4 +1,4 @@
-%%writefile requirements.txt
+
 streamlit
 joblib
 librosa
