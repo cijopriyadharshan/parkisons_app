@@ -8,7 +8,7 @@ import time
 @st.cache_resource
 def load_model():
     try:
-        artifacts = joblib.load('parkisons_final.pkl')
+        artifacts = joblib.load('parkinsons_final.pkl')
         return artifacts['model'], artifacts['scaler'], artifacts['selector'], artifacts['threshold']
     except:
         st.error("Model not found. Upload `parkisons final.pkl`")
