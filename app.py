@@ -4,65 +4,54 @@ import librosa
 import numpy as np
 import io
 from deep_translator import GoogleTranslator
-from pydub import AudioSegment
 import time
 
-# === ANIMATED BACKGROUND (NO UPLOAD NEEDED) ===
-st.markdown("""
+# === STATIC BACKGROUND (MANUAL UPLOAD) ===
+st.markdown(f"""
 <style>
-    .stApp {
-        background: linear-gradient(-45deg, #1e3c72, #2a5298, #0f2027, #203a43);
-        background-size: 400% 400%;
-        animation: gradient 15s ease infinite;
+    .stApp {{
+        background-image: url("bg.jpg");
+        background-size: cover;
+        background-position: center;
+        background-attachment: fixed;
         color: white;
-    }
-    @keyframes gradient {
-        0% { background-position: 0% 50%; }
-        50% { background-position: 100% 50%; }
-        100% { background-position: 0% 50%; }
-    }
-    .title {
+    }}
+    .overlay {{
+        background: rgba(0, 0, 0, 0.5);
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        z-index: -1;
+    }}
+    .title {{
         font-size: 3.8rem;
         font-weight: 900;
         text-align: center;
         margin: 2rem 0;
-        background: linear-gradient(90deg, #00dbde, #fc00ff);
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
-        animation: fadeIn 2s ease-in-out;
-    }
-    .subtitle {
+        color: #fff;
+        text-shadow: 0 0 15px rgba(255,255,255,0.5);
+    }}
+    .subtitle {{
         text-align: center;
         font-size: 1.4rem;
-        opacity: 0.9;
         margin-bottom: 2.5rem;
-        animation: fadeIn 2.5s ease-in-out;
-    }
-    @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(20px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-    .stFileUploader > div > div {
-        background: rgba(255,255,255,0.15);
+        color: #eee;
+    }}
+    .stFileUploader > div > div {{
+        background: rgba(255,255,255,0.2);
         border-radius: 20px;
         padding: 1.5rem;
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(255,255,255,0.2);
-    }
-    .stMetric {
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(255,255,255,0.3);
+    }}
+    .stMetric {{
         font-size: 2.5rem !important;
         text-align: center;
-    }
-    .pulse {
-        animation: pulse 2s infinite;
-    }
-    @keyframes pulse {
-        0% { transform: scale(1); }
-        50% { transform: scale(1.08); }
-        100% { transform: scale(1); }
-    }
+        background: rgba(0,0,0,0.3);
+        border-radius: 15px;
+        padding: 1rem;
+    }}
 </style>
+<div class="overlay"></div>
 """, unsafe_allow_html=True)
 
 # === CONFIG ===
@@ -86,47 +75,16 @@ model, scaler, selector, threshold = load_model()
 def get_translator(target='en'):
     return GoogleTranslator(source='auto', target=target)
 
-# === AUDIO CONVERTER ===
-def convert_audio(file_bytes, original_format):
-    try:
-        audio = AudioSegment.from_file(io.BytesIO(file_bytes), format=original_format)
-        wav_io = io.BytesIO()
-        audio.export(wav_io, format="wav")
-        wav_io.seek(0)
-        return wav_io
-    except Exception as e:
-        st.error(f"Audio conversion failed: {e}")
-        return None
-
-# === AUDIO LOADER ===
+# === AUDIO LOADER (NO FFMPEG) ===
 def load_audio(file):
-    file_bytes = file.read()
-    file_name = file.name.lower()
-
-    if file_name.endswith('.amr'):
-        wav_io = convert_audio(file_bytes, 'amr')
-    elif file_name.endswith('.m4a'):
-        wav_io = convert_audio(file_bytes, 'm4a')
-    elif file_name.endswith('.ogg'):
-        wav_io = convert_audio(file_bytes, 'ogg')
-    elif file_name.endswith('.aac'):
-        wav_io = convert_audio(file_bytes, 'aac')
-    elif file_name.endswith('.wma'):
-        wav_io = convert_audio(file_bytes, 'wma')
-    elif file_name.endswith('.mp3'):
-        wav_io = convert_audio(file_bytes, 'mp3')
-    elif file_name.endswith('.wav'):
-        wav_io = io.BytesIO(file_bytes)
-    elif file_name.endswith('.flac'):
-        wav_io = convert_audio(file_bytes, 'flac')
-    else:
-        st.error("Unsupported format. Try WAV, MP3, AMR, M4A, OGG, FLAC")
-        return None, None
-
-    if wav_io:
-        y, sr = librosa.load(wav_io, sr=22050)
+    try:
+        audio_bytes = io.BytesIO(file.read())
+        y, sr = librosa.load(audio_bytes, sr=22050)
         return y[:sr*5], sr
-    return None, None
+    except Exception as e:
+        st.error(f"Audio loading failed: {e}")
+        st.info("Supported: WAV, MP3, M4A, OGG, FLAC, AMR")
+        return None, None
 
 # === FEATURE EXTRACTION ===
 def extract_features(y, sr):
@@ -161,8 +119,8 @@ st.markdown("<br>", unsafe_allow_html=True)
 
 # Upload
 audio = st.file_uploader(
-    t("Upload voice: AMR, WAV, MP3, M4A, OGG, FLAC, AAC, WMA"),
-    type=['amr', 'wav', 'mp3', 'm4a', 'ogg', 'flac', 'aac', 'wma']
+    t("Upload voice: AMR, WAV, MP3, M4A, OGG, FLAC"),
+    type=['amr', 'wav', 'mp3', 'm4a', 'ogg', 'flac']
 )
 
 if audio and model:
@@ -183,9 +141,9 @@ if audio and model:
         pred = prob >= threshold
 
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown(f"<h2 class='pulse' style='text-align:center;'>{t('Risk Score')}</h2>", unsafe_allow_html=True)
         col1, col2, col3 = st.columns([1,2,1])
         with col2:
+            st.markdown(f"<h2 style='text-align:center; color:#fff;'>{t('Risk Score')}</h2>", unsafe_allow_html=True)
             st.metric("", f"{prob:.1%}", delta=None)
 
         if pred:
