@@ -5,4 +5,4 @@ librosa
 numpy
 scikit-learn
 xgboost
-googletrans==4.0.0-rc1
+googletrans-py==4.0.0-8
