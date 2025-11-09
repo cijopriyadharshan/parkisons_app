@@ -6,7 +6,7 @@ import io
 from deep_translator import GoogleTranslator
 import time
 
-# === STATIC BACKGROUND (MANUAL UPLOAD) ===
+# === CUSTOM BACKGROUND + DARK TEXT UI ===
 st.markdown(f"""
 <style>
     .stApp {{
@@ -14,40 +14,57 @@ st.markdown(f"""
         background-size: cover;
         background-position: center;
         background-attachment: fixed;
-        color: white;
+        color: #000000 !important;
     }}
     .overlay {{
-        background: rgba(0, 0, 0, 0.5);
+        background: rgba(255, 255, 255, 0.85);
         position: fixed;
         top: 0; left: 0; right: 0; bottom: 0;
         z-index: -1;
+        backdrop-filter: blur(5px);
     }}
     .title {{
         font-size: 3.8rem;
         font-weight: 900;
         text-align: center;
         margin: 2rem 0;
-        color: #fff;
-        text-shadow: 0 0 15px rgba(255,255,255,0.5);
+        color: #1a1a1a !important;
+        text-shadow: none;
     }}
     .subtitle {{
         text-align: center;
         font-size: 1.4rem;
         margin-bottom: 2.5rem;
-        color: #eee;
+        color: #333333 !important;
+        font-weight: 500;
     }}
     .stFileUploader > div > div {{
-        background: rgba(255,255,255,0.2);
-        border-radius: 20px;
+        background: rgba(255,255,255,0.95);
+        border-radius: 16px;
         padding: 1.5rem;
-        backdrop-filter: blur(12px);
-        border: 1px solid rgba(255,255,255,0.3);
+        border: 2px solid #007acc;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }}
+    .stFileUploader label {{
+        color: #007acc !important;
+        font-weight: bold;
     }}
     .stMetric {{
-        font-size: 2.5rem !important;
+        background: #ffffff;
+        border-radius: 12px;
+        padding: 1rem;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
         text-align: center;
-        background: rgba(0,0,0,0.3);
-        border-radius: 15px;
+    }}
+    .stMetric > div:first-child {{
+        color: #007acc !important;
+        font-weight: bold;
+    }}
+    .stSpinner > div {{
+        color: #007acc !important;
+    }}
+    .stError, .stSuccess, .stInfo {{
+        border-radius: 12px;
         padding: 1rem;
     }}
 </style>
@@ -75,15 +92,20 @@ model, scaler, selector, threshold = load_model()
 def get_translator(target='en'):
     return GoogleTranslator(source='auto', target=target)
 
-# === AUDIO LOADER (NO FFMPEG) ===
+# === FIXED AUDIO LOADER (NO FORMAT ERROR) ===
 def load_audio(file):
     try:
-        audio_bytes = io.BytesIO(file.read())
-        y, sr = librosa.load(audio_bytes, sr=22050)
-        return y[:sr*5], sr
+        # Read and reset pointer
+        audio_bytes = file.read()
+        audio_io = io.BytesIO(audio_bytes)
+        audio_io.seek(0)  # CRITICAL: Reset pointer
+
+        # Let librosa auto-detect format
+        y, sr = librosa.load(audio_io, sr=22050, mono=True)
+        return y[:sr*5], sr  # First 5 seconds
     except Exception as e:
         st.error(f"Audio loading failed: {e}")
-        st.info("Supported: WAV, MP3, M4A, OGG, FLAC, AMR")
+        st.info("Supported formats: WAV, MP3, M4A, OGG, FLAC, AMR")
         return None, None
 
 # === FEATURE EXTRACTION ===
@@ -143,8 +165,8 @@ if audio and model:
         st.markdown("<br>", unsafe_allow_html=True)
         col1, col2, col3 = st.columns([1,2,1])
         with col2:
-            st.markdown(f"<h2 style='text-align:center; color:#fff;'>{t('Risk Score')}</h2>", unsafe_allow_html=True)
-            st.metric("", f"{prob:.1%}", delta=None)
+            st.markdown(f"<h2 style='text-align:center; color:#007acc;'>{t('Risk Score')}</h2>", unsafe_allow_html=True)
+            st.metric("", f"{prob:.1%}")
 
         if pred:
             st.error(f"**{t('HIGH RISK')}** — {t('Consult a neurologist immediately')}")
