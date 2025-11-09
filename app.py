@@ -87,31 +87,47 @@ def get_translator(target='en'):
     return GoogleTranslator(source='auto', target=target)
 
 # === AUDIO LOADER (AMR WORKS) ===
+# === DEBUG AUDIO LOADER ===
 def load_audio(file):
+    st.write("DEBUG: Starting audio load...")
     try:
         file_bytes = file.read()
+        st.write(f"DEBUG: File size: {len(file_bytes)} bytes")
         file_name = file.name.lower()
+        st.write(f"DEBUG: File name: {file_name}")
         suffix = os.path.splitext(file_name)[1]
+        st.write(f"DEBUG: Extension: {suffix}")
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_in:
             tmp_in.write(file_bytes)
             input_path = tmp_in.name
+        st.write(f"DEBUG: Input temp file: {input_path}")
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_out:
             output_path = tmp_out.name
+        st.write(f"DEBUG: Output temp file: {output_path}")
 
         cmd = [
             "ffmpeg", "-y", "-i", input_path,
             "-ar", "22050", "-ac", "1", "-f", "wav", output_path
         ]
+        st.write(f"DEBUG: Running ffmpeg command: {' '.join(cmd)}")
+
         result = subprocess.run(cmd, capture_output=True, text=True)
+        st.write(f"DEBUG: ffmpeg exit code: {result.returncode}")
+        st.write(f"DEBUG: ffmpeg stdout: {result.stdout}")
+        st.write(f"DEBUG: ffmpeg stderr: {result.stderr}")
 
         os.unlink(input_path)
         if result.returncode != 0:
             os.unlink(output_path)
-            raise Exception(f"ffmpeg error: {result.stderr}")
+            raise Exception(f"ffmpeg failed: {result.stderr}")
+
+        st.write("DEBUG: ffmpeg conversion SUCCESS")
 
         y, sr = librosa.load(output_path, sr=22050)
+        st.write(f"DEBUG: Audio loaded: {len(y)} samples, sr={sr}")
+
         os.unlink(output_path)
         return y[:sr*5], sr
 
@@ -119,7 +135,6 @@ def load_audio(file):
         st.error(f"Audio loading failed: {e}")
         st.info("Supported: AMR, WAV, MP3, M4A, OGG, FLAC")
         return None, None
-
 # === FEATURE EXTRACTION ===
 def extract_features(y, sr):
     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
