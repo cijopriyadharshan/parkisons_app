@@ -1,7 +1,10 @@
-streamlit
+fastapi
+uvicorn
+flask
+gunicorn
+requests
 joblib
 librosa
 numpy
 scikit-learn
 xgboost
-deep-translator
