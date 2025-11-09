@@ -1,0 +1,6 @@
+streamlit
+joblib
+librosa
+numpy
+scikit-learn
+xgboost
