@@ -2,11 +2,12 @@ import streamlit as st
 import joblib
 import numpy as np
 import io
-from pydub import AudioSegment
-from deep_translator import GoogleTranslator
-import time
+import subprocess          # <-- ADDED THIS LINE
 import tempfile
 import os
+from deep_translator import GoogleTranslator
+import time
+import librosa
 
 # === CUSTOM BACKGROUND + DARK TEXT UI ===
 st.markdown(f"""
@@ -85,22 +86,22 @@ model, scaler, selector, threshold = load_model()
 def get_translator(target='en'):
     return GoogleTranslator(source='auto', target=target)
 
-# === AUDIO LOADER (100% FIXED — AMR WORKS) ===
+# === AUDIO LOADER (AMR WORKS) ===
 def load_audio(file):
     try:
         file_bytes = file.read()
         file_name = file.name.lower()
         suffix = os.path.splitext(file_name)[1]
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-            tmp.write(file_bytes)
-            input_path = tmp.name
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_in:
+            tmp_in.write(file_bytes)
+            input_path = tmp_in.name
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_out:
             output_path = tmp_out.name
 
         cmd = [
-            "ffmpeg", "-y", "-i", input_path, 
+            "ffmpeg", "-y", "-i", input_path,
             "-ar", "22050", "-ac", "1", "-f", "wav", output_path
         ]
         result = subprocess.run(cmd, capture_output=True, text=True)
@@ -144,13 +145,11 @@ target_lang = langs[lang]
 tr = get_translator(target_lang)
 t = lambda x: tr.translate(x)
 
-# Header
 st.markdown(f"<h1 class='title'>{t('Parkinson Detector')}</h1>", unsafe_allow_html=True)
 st.markdown(f"<p class='subtitle'>{t('AI-Powered Voice Analysis')}</p>", unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# Upload
 audio = st.file_uploader(
     t("Upload voice: AMR, WAV, MP3, M4A, OGG, FLAC"),
     type=['amr', 'wav', 'mp3', 'm4a', 'ogg', 'flac']
