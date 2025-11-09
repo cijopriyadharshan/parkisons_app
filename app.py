@@ -7,30 +7,66 @@ from deep_translator import GoogleTranslator
 from pydub import AudioSegment
 import time
 
-# === CONFIG ===
-st.set_page_config(page_title="Parkinson Detector", layout="centered")
+# === ANIMATED BACKGROUND (NO UPLOAD NEEDED) ===
 st.markdown("""
 <style>
-    .main { background: linear-gradient(135deg, #1e3c72, #2a5298); color: white; }
-    .stApp { background: transparent; }
-    .title { font-size: 3.5rem; font-weight: 900; text-align: center; margin: 1rem 0; 
-             text-shadow: 0 0 10px rgba(255,255,255,0.3); }
-    .subtitle { text-align: center; font-size: 1.3rem; opacity: 0.9; margin-bottom: 2rem; }
-    .stFileUploader > div > div { background: rgba(255,255,255,0.1); border-radius: 15px; padding: 1rem; }
-    .stMetric { font-size: 2rem !important; }
-    .pulse { animation: pulse 2s infinite; }
-    @keyframes pulse {
-        0% { transform: scale(1); }
-        50% { transform: scale(1.05); }
-        100% { transform: scale(1); }
+    .stApp {
+        background: linear-gradient(-45deg, #1e3c72, #2a5298, #0f2027, #203a43);
+        background-size: 400% 400%;
+        animation: gradient 15s ease infinite;
+        color: white;
     }
-    .fade-in { animation: fadeIn 1.5s; }
+    @keyframes gradient {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
+    .title {
+        font-size: 3.8rem;
+        font-weight: 900;
+        text-align: center;
+        margin: 2rem 0;
+        background: linear-gradient(90deg, #00dbde, #fc00ff);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        animation: fadeIn 2s ease-in-out;
+    }
+    .subtitle {
+        text-align: center;
+        font-size: 1.4rem;
+        opacity: 0.9;
+        margin-bottom: 2.5rem;
+        animation: fadeIn 2.5s ease-in-out;
+    }
     @keyframes fadeIn {
         from { opacity: 0; transform: translateY(20px); }
         to { opacity: 1; transform: translateY(0); }
     }
+    .stFileUploader > div > div {
+        background: rgba(255,255,255,0.15);
+        border-radius: 20px;
+        padding: 1.5rem;
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255,255,255,0.2);
+    }
+    .stMetric {
+        font-size: 2.5rem !important;
+        text-align: center;
+    }
+    .pulse {
+        animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.08); }
+        100% { transform: scale(1); }
+    }
 </style>
 """, unsafe_allow_html=True)
+
+# === CONFIG ===
+st.set_page_config(page_title="Parkinson Detector", layout="centered")
 
 # === LOAD MODEL ===
 @st.cache_resource
@@ -118,17 +154,8 @@ tr = get_translator(target_lang)
 t = lambda x: tr.translate(x)
 
 # Header
-st.markdown(f"<h1 class='title fade-in'>{t('Parkinson Detector')}</h1>", unsafe_allow_html=True)
-st.markdown(f"<p class='subtitle'>{t('756 patients • 97% accuracy • 20+ Languages • All Audio Formats')}</p>", unsafe_allow_html=True)
-
-# Images
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.image("https://i.imgur.com/8x9zXKp.png", use_column_width=True)
-with col2:
-    st.image("https://i.imgur.com/5kL3vYJ.png", use_column_width=True)
-with col3:
-    st.image("https://i.imgur.com/Q2m8vRt.png", use_column_width=True)
+st.markdown(f"<h1 class='title'>{t('Parkinson Detector')}</h1>", unsafe_allow_html=True)
+st.markdown(f"<p class='subtitle'>{t('AI-Powered Voice Analysis')}</p>", unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
