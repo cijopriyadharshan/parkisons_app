@@ -2,7 +2,7 @@ import streamlit as st
 import joblib
 import numpy as np
 import io
-import soundfile as sf
+from pydub import AudioSegment
 from deep_translator import GoogleTranslator
 import time
 
@@ -84,46 +84,39 @@ model, scaler, selector, threshold = load_model()
 def get_translator(target='en'):
     return GoogleTranslator(source='auto', target=target)
 
-# === AUDIO LOADER (FIXED — ALL FORMATS) ===
+# === AUDIO LOADER (AMR + ALL FORMATS) ===
 def load_audio(file):
     try:
-        # Read file
         file_bytes = file.read()
         file_io = io.BytesIO(file_bytes)
-        file_io.seek(0)
-
-        # Detect format from extension
         file_name = file.name.lower()
-        if file_name.endswith('.wav'):
-            fmt = 'WAV'
-        elif file_name.endswith('.mp3'):
-            fmt = 'MP3'
-        elif file_name.endswith('.m4a'):
-            fmt = 'M4A'
-        elif file_name.endswith('.ogg'):
-            fmt = 'OGG'
-        elif file_name.endswith('.flac'):
-            fmt = 'FLAC'
-        elif file_name.endswith('.amr'):
-            fmt = 'AMR'
-        else:
-            fmt = None
 
-        # Use soundfile (supports all via ffmpeg backend)
-        y, sr = sf.read(file_io, format=fmt)
-        y = y.astype(np.float32)
-        if len(y.shape) > 1:
-            y = y.mean(axis=1)  # Convert to mono
-        if sr != 22050:
-            # Resample manually if needed (soundfile doesn't resample)
-            from scipy.signal import resample
-            num_samples = int(len(y) * 22050 / sr)
-            y = resample(y, num_samples)
-            sr = 22050
-        return y[:22050*5], 22050  # 5 seconds
+        # Detect format
+        if file_name.endswith('.amr'):
+            audio = AudioSegment.from_file(file_io, format="amr")
+        elif file_name.endswith('.mp3'):
+            audio = AudioSegment.from_file(file_io, format="mp3")
+        elif file_name.endswith('.m4a'):
+            audio = AudioSegment.from_file(file_io, format="m4a")
+        elif file_name.endswith('.ogg'):
+            audio = AudioSegment.from_file(file_io, format="ogg")
+        elif file_name.endswith('.flac'):
+            audio = AudioSegment.from_file(file_io, format="flac")
+        elif file_name.endswith('.wav'):
+            audio = AudioSegment.from_file(file_io, format="wav")
+        else:
+            st.error("Unsupported format.")
+            return None, None
+
+        # Convert to 22050 Hz, mono, numpy array
+        audio = audio.set_frame_rate(22050).set_channels(1)
+        samples = np.array(audio.get_array_of_samples(), dtype=np.float32)
+        samples = samples / (2**15)  # Normalize int16 to float32 [-1, 1]
+
+        return samples[:22050*5], 22050  # First 5 seconds
     except Exception as e:
         st.error(f"Audio loading failed: {e}")
-        st.info("Supported: WAV, MP3, M4A, OGG, FLAC, AMR")
+        st.info("Supported: AMR, WAV, MP3, M4A, OGG, FLAC")
         return None, None
 
 # === FEATURE EXTRACTION ===
