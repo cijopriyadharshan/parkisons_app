@@ -5,3 +5,5 @@ numpy
 scikit-learn
 xgboost
 deep-translator
+pydub
+ffmpeg-python
