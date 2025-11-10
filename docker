@@ -1,25 +1,17 @@
-FROM python:3.9-slim
+# Dockerfile
+FROM python:3.10-slim
 
-# Install system dependencies including ffmpeg
-RUN apt-get update && apt-get install -y \
-    ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
+# Install FFmpeg + AMR support
+RUN apt-get update && \
+    apt-get install -y ffmpeg libopencore-amrnb0 libopencore-amrwb0 && \
+    rm -rf /var/lib/apt/lists/*
 
-# Set working directory
+# Fix Render pip/setuptools
+RUN pip install --upgrade pip setuptools wheel
+
 WORKDIR /app
-
-# Copy requirements and install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application files
-COPY app.py .
-COPY parkinsons_final.pkl .
-COPY templates/ ./templates/
-
-# Expose port (Render will set PORT env var)
-EXPOSE 8000
-
-# Run the application (uvicorn will use PORT env var from Render)
+COPY . .
 CMD ["python", "app.py"]
-
