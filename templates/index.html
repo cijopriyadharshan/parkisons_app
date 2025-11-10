@@ -5,52 +5,44 @@
   <title>Parkinson Voice Detector</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    body {font-family: 'Segoe UI', sans-serif; text-align: center; background: #f0f8ff; padding: 2rem; margin: 0;}
-    .container {max-width: 600px; margin: auto; background: white; padding: 2.5rem; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.1);}
-    h1 {margin-bottom: 0.5rem;}
-    .instruction {color: #555; font-size: 1rem; margin: 1rem 0;}
-    input, button {margin: 0.5rem; padding: 1rem; border-radius: 10px; width: 100%; max-width: 300px; font-size: 1rem;}
-    #langInput {padding: 0.8rem; font-size: 0.9rem;}
-    #record {background: #dc2626; color: white; font-weight: bold; border: none;}
+    body {font-family: sans-serif; text-align: center; background: #f0f8ff; padding: 2rem;}
+    .container {max-width: 600px; margin: auto; background: white; padding: 2.5rem; border-radius: 16px;}
+    input, button {margin: 0.5rem; padding: 1rem; border-radius: 10px; width: 100%; max-width: 300px;}
+    #record {background: #dc2626; color: white;}
     #loading {display: none;}
-    .result {margin-top: 1.5rem; padding: 1.2rem; border-radius: 12px; font-weight: bold;}
-    .high {background: #fee2e2; color: #dc2626; border: 2px solid #fecaca;}
-    .low {background: #dcfce7; color: #16a34a; border: 2px solid #bbf7d0;}
-    audio {width: 100%; max-width: 300px; margin: 1rem 0;}
+    .result {margin-top: 1.5rem; padding: 1.2rem; border-radius: 12px;}
+    .high {background: #fee2e2; color: #dc2626;}
+    .low {background: #dcfce7; color: #16a34a;}
   </style>
 </head>
 <body>
   <div class="container">
     <h1 data-text="Parkinson Voice Detector">Parkinson Voice Detector</h1>
-    <p class="instruction" data-text="Hold the red button and say &quot;Aaaah&quot; for 5 seconds">
-      Hold the red button and say "Aaaah" for 5 seconds
-    </p>
+    <p data-text="Hold red button & say &quot;Aaaah&quot; for 5 sec">Hold red button & say "Aaaah" for 5 sec</p>
 
-    <input type="text" id="langInput" placeholder="Enter language code: hi, ta, fr, es, ar..." value="{{ lang }}">
-    <button onclick="changeLang()">Change Language</button>
+    <input type="text" placeholder="lang: hi, ta, fr..." value="{{ lang }}" id="lang">
+    <button onclick="location.href='/?lang='+document.getElementById('lang').value">Change</button>
 
-    <form method="post" enctype="multipart/form-data" id="uploadForm">
-      <input type="file" name="file" accept="audio/*" id="fileInput" style="display:none;">
-      <br>
+    <form method="post" enctype="multipart/form-data" id="form">
+      <input type="file" name="file" accept="audio/*" id="file" style="display:none">
       <button type="button" id="record">Hold to Record</button>
-      <audio id="audio" controls style="display:none"></audio>
-      <br>
-      <button type="submit" id="btn">
-        <span id="text" data-text="Analyze Voice">Analyze Voice</span>
+      <audio id="audio" controls style="display:none; width:300px"></audio>
+      <button type="submit">
+        <span id="text" data-text="Analyze">Analyze</span>
         <span id="loading" data-text="Analyzing...">Analyzing...</span>
       </button>
     </form>
 
     {% if result %}
-      <div class="result {% if result.risk == 'HIGH' %}high{% else %}low{% endif %}">
+      <div class="result {{ 'high' if result.risk == 'HIGH' else 'low' }}">
         {% if result.error %}
           <p style="color:red" data-text="Error: {{ result.error }}">Error: {{ result.error }}</p>
         {% else %}
-          <p data-text="Risk Score: <strong>{{ "%.1f"|format(result.risk_score * 100) }}%</strong>">
-            Risk Score: <strong>{{ "%.1f"|format(result.risk_score * 100) }}%</strong>
+          <p data-text="Risk: <strong>{{ "%.1f"|format(result.risk_score * 100) }}%</strong>">
+            Risk: <strong>{{ "%.1f"|format(result.risk_score * 100) }}%</strong>
           </p>
-          <p data-text="{% if result.risk == 'HIGH' %}HIGH RISK — Please consult a doctor{% else %}LOW RISK — Voice appears healthy{% endif %}">
-            {% if result.risk == 'HIGH' %}HIGH RISK — Please consult a doctor{% else %}LOW RISK — Voice appears healthy{% endif %}
+          <p data-text="{{ 'HIGH RISK — See doctor' if result.risk == 'HIGH' else 'LOW RISK — Healthy' }}">
+            {{ 'HIGH RISK — See doctor' if result.risk == 'HIGH' else 'LOW RISK — Healthy' }}
           </p>
         {% endif %}
       </div>
@@ -58,66 +50,41 @@
   </div>
 
   <script>
-    let recorder, audioBlob;
-    const form = document.getElementById('uploadForm');
-    const fileInput = document.getElementById('fileInput');
-    const langInput = document.getElementById('langInput');
-
-    function changeLang() {
-      const lang = langInput.value.trim() || 'en';
-      location.href = `/?lang=${lang}`;
-    }
-
-    // Translate all [data-text]
+    let r, blob;
     const lang = new URLSearchParams(location.search).get('lang') || 'en';
     if (lang !== 'en') {
       document.querySelectorAll('[data-text]').forEach(el => {
-        const text = el.dataset.text;
         fetch('/translate', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({text, lang})
-        })
-        .then(r => r.json())
-        .then(data => el.innerHTML = data.translated)
-        .catch(() => el.innerHTML = text);
+          body: JSON.stringify({text: el.dataset.text, lang})
+        }).then(r => r.json()).then(d => el.innerHTML = d.translated);
       });
     }
 
-    // Recording
-    document.getElementById('record').onpointerdown = async (e) => {
+    document.getElementById('record').onpointerdown = async e => {
       e.preventDefault();
-      if (recorder) return;
-
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({audio: true});
-        recorder = new MediaRecorder(stream);
-        const chunks = [];
-
-        recorder.ondataavailable = e => chunks.push(e.data);
-        recorder.onstop = () => {
-          audioBlob = new Blob(chunks, {type: 'audio/wav'});
-          const url = URL.createObjectURL(audioBlob);
-          const audio = document.getElementById('audio');
-          audio.src = url; audio.style.display = 'block';
-
-          const dataTransfer = new DataTransfer();
-          dataTransfer.items.add(new File([audioBlob], "voice.wav", {type: 'audio/wav'}));
-          fileInput.files = dataTransfer.files;
-
-          stream.getTracks().forEach(t => t.stop());
-          recorder = null;
-          document.getElementById('record').textContent = 'Hold to Record';
-        };
-
-        recorder.start();
-        document.getElementById('record').textContent = 'Recording...';
-      } catch (err) {
-        alert("Microphone access denied");
-      }
+      if (r) return;
+      const s = await navigator.mediaDevices.getUserMedia({audio: true});
+      r = new MediaRecorder(s); const c = [];
+      r.ondataavailable = e => c.push(e.data);
+      r.onstop = () => {
+        blob = new Blob(c, {type: 'audio/wav'});
+        const url = URL.createObjectURL(blob);
+        const a = document.getElementById('audio');
+        a.src = url; a.style.display = 'block';
+        const dt = new DataTransfer();
+        dt.items.add(new File([blob], "voice.wav"));
+        document.getElementById('file').files = dt.files;
+        s.getTracks().forEach(t => t.stop());
+        r = null;
+        document.getElementById('record').textContent = 'Hold to Record';
+      };
+      r.start();
+      document.getElementById('record').textContent = 'Recording...';
     };
 
-    form.onsubmit = () => {
+    document.getElementById('form').onsubmit = () => {
       document.getElementById('text').style.display = 'none';
       document.getElementById('loading').style.display = 'inline';
     };
