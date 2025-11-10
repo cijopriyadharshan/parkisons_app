@@ -37,7 +37,7 @@ def extract_features(y, sr):
     full[:len(feats)] = feats
     return full
 
-# === FASTAPI (BACKGROUND) ===
+# === FASTAPI (API ONLY) ===
 fastapi_app = FastAPI()
 fastapi_app.add_middleware(CORSMiddleware, allow_origins=["*"])
 
@@ -71,8 +71,8 @@ async def predict(file: UploadFile = File(...)):
     except Exception as e:
         return {"error": str(e)}
 
-# === FLASK (MAIN APP) ===
-app = Flask(__name__)  # ← THIS IS THE MAIN APP NOW
+# === FLASK (MAIN UI) ===
+app = Flask(__name__, template_folder='templates')
 API_URL = "http://localhost:8000/predict"
 
 LANGUAGES = {'en': 'English', 'hi': 'हिंदी', 'ta': 'தமிழ்', 'bn': 'বাংলা'}
@@ -99,16 +99,3 @@ def translate():
     text = request.json['text']
     target = request.json['lang']
     return jsonify({"translated": translate_text(text, target)})
-
-# === MOUNT FASTAPI ON FLASK ===
-from werkzeug.middleware.dispatcher import DispatcherMiddleware
-from fastapi.middleware.wsgi import WSGIMiddleware
-
-app.wsgi_app = DispatcherMiddleware(app.wsgi_app, {
-    '/api': fastapi_app  # FastAPI at /api/predict
-})
-
-# === SERVE STATIC (IF NEEDED) ===
-@app.route('/static/<path:path>')
-def send_static(path):
-    return send_from_directory('static', path)
