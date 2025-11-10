@@ -1,48 +1,57 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Parkinson Detector</title>
+  <meta charset="UTF-8">
+  <title>Parkinson Voice Detector</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    body {font-family: 'Segoe UI'; text-align: center; background: #f0f8ff; padding:  2rem;}
-    .container {max-width: 600px; margin: auto; background: white; padding: 2.5rem; border-radius: 16px;}
-    select, button {margin: 0.5rem; padding: 0.8rem; border-radius: 8px;}
-    #record {background: #dc2626; color: white;}
+    body {font-family: 'Segoe UI', sans-serif; text-align: center; background: #f0f8ff; padding: 2rem; margin: 0;}
+    .container {max-width: 600px; margin: auto; background: white; padding: 2.5rem; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.1);}
+    h1 {margin-bottom: 0.5rem;}
+    .instruction {color: #555; font-size: 1rem; margin: 1rem 0;}
+    input, button {margin: 0.5rem; padding: 1rem; border-radius: 10px; width: 100%; max-width: 300px; font-size: 1rem;}
+    #langInput {padding: 0.8rem; font-size: 0.9rem;}
+    #record {background: #dc2626; color: white; font-weight: bold; border: none;}
     #loading {display: none;}
-    .result {margin-top: 1rem; padding: 1rem; border-radius: 8px;}
-    .high {background: #fee2e2; color: #dc2626;}
-    .low {background: #dcfce7; color: #16a34a;}
+    .result {margin-top: 1.5rem; padding: 1.2rem; border-radius: 12px; font-weight: bold;}
+    .high {background: #fee2e2; color: #dc2626; border: 2px solid #fecaca;}
+    .low {background: #dcfce7; color: #16a34a; border: 2px solid #bbf7d0;}
+    audio {width: 100%; max-width: 300px; margin: 1rem 0;}
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>Parkinson Voice Detector</h1>
-    
-    <select onchange="location.href='?lang='+this.value">
-      {% for code, name in languages.items() %}
-        <option value="{{ code }}" {% if lang == code %}selected{% endif %}>{{ name }}</option>
-      {% endfor %}
-    </select>
+    <h1 data-text="Parkinson Voice Detector">Parkinson Voice Detector</h1>
+    <p class="instruction" data-text="Hold the red button and say &quot;Aaaah&quot; for 5 seconds">
+      Hold the red button and say "Aaaah" for 5 seconds
+    </p>
 
-    <form method="post" enctype="multipart/form-data">
-      <input type="file" name="file" accept="audio/*">
-      <br><br>
-      <button type="button" id="record">Record Voice</button>
+    <input type="text" id="langInput" placeholder="Enter language code: hi, ta, fr, es, ar..." value="{{ lang }}">
+    <button onclick="changeLang()">Change Language</button>
+
+    <form method="post" enctype="multipart/form-data" id="uploadForm">
+      <input type="file" name="file" accept="audio/*" id="fileInput" style="display:none;">
+      <br>
+      <button type="button" id="record">Hold to Record</button>
       <audio id="audio" controls style="display:none"></audio>
-      <br><br>
+      <br>
       <button type="submit" id="btn">
-        <span id="text">Analyze</span>
-        <span id="loading">Processing...</span>
+        <span id="text" data-text="Analyze Voice">Analyze Voice</span>
+        <span id="loading" data-text="Analyzing...">Analyzing...</span>
       </button>
     </form>
 
     {% if result %}
-      <div class="result {% if result.risk == 'HIGH' %}high{% else %}low{% endif %}" id="result">
+      <div class="result {% if result.risk == 'HIGH' %}high{% else %}low{% endif %}">
         {% if result.error %}
-          <p style="color:red" data-text="Error: {{ result.error }}"></p>
+          <p style="color:red" data-text="Error: {{ result.error }}">Error: {{ result.error }}</p>
         {% else %}
-          <p data-text="Risk Score: <strong>{{ "%.1f"|format(result.risk_score * 100) }}%</strong>"></p>
-          <p data-text="{% if result.risk == 'HIGH' %}HIGH RISK — Consult doctor{% else %}LOW RISK — Healthy{% endif %}"></p>
+          <p data-text="Risk Score: <strong>{{ "%.1f"|format(result.risk_score * 100) }}%</strong>">
+            Risk Score: <strong>{{ "%.1f"|format(result.risk_score * 100) }}%</strong>
+          </p>
+          <p data-text="{% if result.risk == 'HIGH' %}HIGH RISK — Please consult a doctor{% else %}LOW RISK — Voice appears healthy{% endif %}">
+            {% if result.risk == 'HIGH' %}HIGH RISK — Please consult a doctor{% else %}LOW RISK — Voice appears healthy{% endif %}
+          </p>
         {% endif %}
       </div>
     {% endif %}
@@ -50,42 +59,65 @@
 
   <script>
     let recorder, audioBlob;
-    document.getElementById('record').onclick = async () => {
-      const stream = await navigator.mediaDevices.getUserMedia({audio: true});
-      recorder = new MediaRecorder(stream);
-      const chunks = [];
-      recorder.ondataavailable = e => chunks.push(e.data);
-      recorder.onstop = () => {
-        audioBlob = new Blob(chunks, {type: 'audio/wav'});
-        const url = URL.createObjectURL(audioBlob);
-        const audio = document.getElementById('audio');
-        audio.src = url; audio.style.display = 'block';
-        const form = document.querySelector('form');
-        const data = new FormData(form);
-        data.append('audio', audioBlob, 'recording.wav');
-        form.onsubmit = (e) => { e.preventDefault(); form.submit(); };
-      };
-      recorder.start();
-      document.getElementById('record').textContent = 'Stop';
-      document.getElementById('record').onclick = () => {
-        recorder.stop(); stream.getTracks().forEach(t => t.stop());
-        document.getElementById('record').textContent = 'Record Voice';
-      };
-    };
+    const form = document.getElementById('uploadForm');
+    const fileInput = document.getElementById('fileInput');
+    const langInput = document.getElementById('langInput');
 
-    // Auto-translate on load
+    function changeLang() {
+      const lang = langInput.value.trim() || 'en';
+      location.href = `/?lang=${lang}`;
+    }
+
+    // Translate all [data-text]
     const lang = new URLSearchParams(location.search).get('lang') || 'en';
     if (lang !== 'en') {
       document.querySelectorAll('[data-text]').forEach(el => {
+        const text = el.dataset.text;
         fetch('/translate', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({text: el.dataset.text, lang: lang})
-        }).then(r => r.json()).then(data => el.innerHTML = data.translated);
+          body: JSON.stringify({text, lang})
+        })
+        .then(r => r.json())
+        .then(data => el.innerHTML = data.translated)
+        .catch(() => el.innerHTML = text);
       });
     }
 
-    document.querySelector('form').onsubmit = () => {
+    // Recording
+    document.getElementById('record').onpointerdown = async (e) => {
+      e.preventDefault();
+      if (recorder) return;
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+        recorder = new MediaRecorder(stream);
+        const chunks = [];
+
+        recorder.ondataavailable = e => chunks.push(e.data);
+        recorder.onstop = () => {
+          audioBlob = new Blob(chunks, {type: 'audio/wav'});
+          const url = URL.createObjectURL(audioBlob);
+          const audio = document.getElementById('audio');
+          audio.src = url; audio.style.display = 'block';
+
+          const dataTransfer = new DataTransfer();
+          dataTransfer.items.add(new File([audioBlob], "voice.wav", {type: 'audio/wav'}));
+          fileInput.files = dataTransfer.files;
+
+          stream.getTracks().forEach(t => t.stop());
+          recorder = null;
+          document.getElementById('record').textContent = 'Hold to Record';
+        };
+
+        recorder.start();
+        document.getElementById('record').textContent = 'Recording...';
+      } catch (err) {
+        alert("Microphone access denied");
+      }
+    };
+
+    form.onsubmit = () => {
       document.getElementById('text').style.display = 'none';
       document.getElementById('loading').style.display = 'inline';
     };
