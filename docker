@@ -1,12 +1,9 @@
-# Dockerfile
 FROM python:3.10-slim
 
-# Install FFmpeg + AMR support
 RUN apt-get update && \
     apt-get install -y ffmpeg libopencore-amrnb0 libopencore-amrwb0 && \
     rm -rf /var/lib/apt/lists/*
 
-# Fix Render pip/setuptools
 RUN pip install --upgrade pip setuptools wheel
 
 WORKDIR /app
@@ -14,4 +11,4 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
-CMD ["python", "app.py"]
+CMD ["python", "run.py"]
