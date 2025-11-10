@@ -1,6 +1,6 @@
+flask
 fastapi
 uvicorn[standard]
-flask
 requests
 joblib
 librosa
@@ -9,3 +9,4 @@ scikit-learn
 xgboost
 python-multipart
 deep-translator
+werkzeug
