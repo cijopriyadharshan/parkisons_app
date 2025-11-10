@@ -18,18 +18,19 @@ scaler = artifacts['scaler']
 selector = artifacts['selector']
 threshold = artifacts['threshold']
 
-# === TRANSLATOR ===
+# === TRANSLATOR (FAST + FALLBACK) ===
 def translate_text(text, target_lang):
     if target_lang == 'en':
         return text
     try:
         return GoogleTranslator(source='en', target=target_lang).translate(text)
     except:
-        return text
+        return text  # fallback
 
 # === EXTRACT 752 FEATURES ===
 def extract_features(y, sr):
-    if len(y) == 0: return np.zeros(752)
+    if len(y) == 0:
+        return np.zeros(752)
     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
     mfcc_mean = mfcc.mean(axis=1)
     mfcc_std = mfcc.std(axis=1)
@@ -47,7 +48,7 @@ fastapi_app.add_middleware(CORSMiddleware, allow_origins=["*"])
 @fastapi_app.post("/predict")
 async def predict(file: UploadFile = File(...)):
     try:
-        contents = await file.read()
+        contents = await fileいずれ.read()
         suffix = os.path.splitext(file.filename)[1].lower()
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_in:
             tmp_in.write(contents); input_path = tmp_in.name
@@ -62,7 +63,7 @@ async def predict(file: UploadFile = File(...)):
             return {"error": "FFmpeg failed"}
 
         y, sr = librosa.load(output_path, sr=22050)
-        y = y[:5 * sr]
+        y = y[:5 * sr]  # 5 sec max
         os.unlink(output_path)
 
         feats = extract_features(y, sr)
@@ -78,7 +79,12 @@ async def predict(file: UploadFile = File(...)):
 flask_app = Flask(__name__)
 API_URL = "http://localhost:8000/predict"
 
-LANGUAGES = {'en': 'English', 'hi': 'हिंदी', 'ta': 'தமிழ்', 'bn': 'বাংলা'}
+LANGUAGES = {
+    'en': 'English',
+    'hi': 'हिंदी',
+    'ta': 'தமிழ்',
+    'bn': 'বাংলা'
+}
 
 @flask_app.route("/", methods=["GET", "POST"])
 def index():
@@ -87,7 +93,7 @@ def index():
     if request.method == "POST":
         file = request.files.get("file") or request.files.get("audio")
         if file and file.content_length > 50 * 1024 * 1024:
-            result = {"error": "File too large"}
+            result = {"error": "File too large. Max 50MB."}
         else:
             files = {'file': (file.filename, file.stream, file.content_type)} if file else None
             try:
