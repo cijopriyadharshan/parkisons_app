@@ -11,17 +11,25 @@ from flask import Flask, render_template, request, jsonify
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
-from googletrans import Translator
+from deep_translator import GoogleTranslator
 
 # === LOAD MODEL ===
 artifacts = joblib.load('parkinsons_final.pkl')
 model = artifacts['model']
 scaler = artifacts['scaler']
-selector = artifacts['selector']   # ← FIXED
+selector = artifacts['selector']
 threshold = artifacts['threshold']
 
-translator = Translator()
+# === TRANSLATOR ===
+def translate_text(text, target_lang):
+    if target_lang == 'en':
+        return text
+    try:
+        return GoogleTranslator(source='en', target=target_lang).translate(text)
+    except:
+        return text
 
+# === EXTRACT 752 FEATURES ===
 def extract_features(y, sr):
     if len(y) == 0: return np.zeros(752)
     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
@@ -66,7 +74,7 @@ async def predict(file: UploadFile = File(...)):
         risk = "HIGH" if prob >= threshold else "LOW"
         return {"risk_score": round(prob, 3), "risk": risk}
     except Exception as e:
-        return {"error": f"Error: {str(e)}"}  # ← BETTER ERROR
+        return {"error": f"Error: {str(e)}"}
 
 # === FLASK ===
 flask_app = Flask(__name__)
@@ -95,7 +103,7 @@ def index():
 def translate():
     text = request.json['text']
     target = request.json['lang']
-    translated = translator.translate(text, dest=target).text
+    translated = translate_text(text, target)
     return jsonify({"translated": translated})
 
 if __name__ == "__main__":
