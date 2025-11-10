@@ -1,12 +1,6 @@
 services:
   - type: web
-    name: parkisons_app
+    name: parkisons-app
     env: docker
-    region: oregon
-    plan: free
-    dockerfilePath: ./docker
+    dockerfilePath: ./Dockerfile
     autoDeploy: true
-    healthCheckPath: /
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.10
