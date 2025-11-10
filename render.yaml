@@ -4,3 +4,4 @@ services:
     env: docker
     dockerfilePath: ./Dockerfile
     autoDeploy: true
+    startCommand: "python app.py"   
