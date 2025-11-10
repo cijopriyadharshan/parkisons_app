@@ -5,11 +5,11 @@ import tempfile
 import librosa
 import numpy as np
 import joblib
-import requests
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_from_directory
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from deep_translator import GoogleTranslator
+from werkzeug.middleware.dispatcher import DispatcherMiddleware
 
 # === LOAD MODEL ===
 artifacts = joblib.load('parkinsons_final.pkl')
@@ -37,7 +37,7 @@ def extract_features(y, sr):
     full[:len(feats)] = feats
     return full
 
-# === FASTAPI (API ONLY) ===
+# === FASTAPI (MOUNTED ON /api) ===
 fastapi_app = FastAPI()
 fastapi_app.add_middleware(CORSMiddleware, allow_origins=["*"])
 
@@ -71,11 +71,8 @@ async def predict(file: UploadFile = File(...)):
     except Exception as e:
         return {"error": str(e)}
 
-# === FLASK (MAIN UI) ===
-app = Flask(__name__, template_folder='templates')
-API_URL = "http://localhost:8000/predict"
-
-LANGUAGES = {'en': 'English', 'hi': 'हिंदी', 'ta': 'தமிழ்', 'bn': 'বাংলা'}
+# === FLASK (MAIN) ===
+app = Flask(__name__, template_folder='templates', static_folder='static')
 
 @app.route("/", methods=["GET", "POST"])
 def index():
@@ -88,14 +85,19 @@ def index():
         else:
             files = {'file': (file.filename, file.stream, file.content_type)} if file else None
             try:
-                response = requests.post(API_URL, files=files, timeout=30)
+                response = requests.post("http://localhost:5000/api/predict", files=files, timeout=30)
                 result = response.json()
             except:
                 result = {"error": "Processing failed"}
-    return render_template("index.html", result=result, lang=lang, languages=LANGUAGES)
+    return render_template("index.html", result=result, lang=lang)
 
 @app.route("/translate", methods=["POST"])
 def translate():
     text = request.json['text']
     target = request.json['lang']
     return jsonify({"translated": translate_text(text, target)})
+
+# === MOUNT FASTAPI ON /api ===
+app.wsgi_app = DispatcherMiddleware(app.wsgi_app, {
+    '/api': fastapi_app
+})
