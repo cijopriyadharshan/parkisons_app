@@ -17,12 +17,11 @@ from googletrans import Translator
 artifacts = joblib.load('parkinsons_final.pkl')
 model = artifacts['model']
 scaler = artifacts['scaler']
-selector = artifacts['threshold']
+selector = artifacts['selector']   # ← FIXED
+threshold = artifacts['threshold']
 
-# Translator
 translator = Translator()
 
-# === EXTRACT 752 FEATURES ===
 def extract_features(y, sr):
     if len(y) == 0: return np.zeros(752)
     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
@@ -67,18 +66,13 @@ async def predict(file: UploadFile = File(...)):
         risk = "HIGH" if prob >= threshold else "LOW"
         return {"risk_score": round(prob, 3), "risk": risk}
     except Exception as e:
-        return {"error": str(e)}
+        return {"error": f"Error: {str(e)}"}  # ← BETTER ERROR
 
 # === FLASK ===
 flask_app = Flask(__name__)
 API_URL = "http://localhost:8000/predict"
 
-LANGUAGES = {
-    'en': 'English',
-    'hi': 'हिंदी',
-    'ta': 'தமிழ்',
-    'bn': 'বাংলা'
-}
+LANGUAGES = {'en': 'English', 'hi': 'हिंदी', 'ta': 'தமிழ்', 'bn': 'বাংলা'}
 
 @flask_app.route("/", methods=["GET", "POST"])
 def index():
@@ -93,8 +87,8 @@ def index():
             try:
                 response = requests.post(API_URL, files=files, timeout=180)
                 result = response.json()
-            except:
-                result = {"error": "Processing failed"}
+            except Exception as e:
+                result = {"error": f"Request failed: {str(e)}"}
     return render_template("index.html", result=result, lang=lang, languages=LANGUAGES)
 
 @flask_app.route("/translate", methods=["POST"])
