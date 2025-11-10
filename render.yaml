@@ -1,9 +1,9 @@
-# render.yaml
 services:
   - type: web
-    name: parkisons-app
+    name: parkinsons-detector
     env: docker
     region: oregon
     plan: free
     dockerfilePath: ./Dockerfile
     autoDeploy: true
+    healthCheckPath: /
