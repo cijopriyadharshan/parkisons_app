@@ -1,97 +1,43 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Parkinson Detector</title>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet"/>
-  <style>
-    :root { --primary: #007acc; --danger: #dc2626; --success: #16a34a; --dark: #1a1a1a; --light: #f8f9fa; }
-    body {font-family: 'Segoe UI', sans-serif; margin:0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height:100vh; transition:0.3s;}
-    body.dark {background: #0f0f0f; color:#eee;}
-    .container {max-width: 500px; margin: 2rem auto; background: white; border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); overflow:hidden;}
-    .header {background: var(--primary); color:white; padding:1.5rem; text-align:center;}
-    .content {padding:2rem;}
-    .lang-select {margin-bottom:1rem; text-align:center;}
-    select {padding:0.5rem 1rem; border-radius:8px; border:none; background:#f1f1f1;}
-    .upload-area {border:3px dashed #ccc; border-radius:16px; padding:2rem; text-align:center; margin:1rem 0; transition:0.3s;}
-    .upload-area.dragover {border-color:var(--primary); background:#f0f8ff;}
-    .btn {background:var(--primary); color:white; padding:1rem 2rem; border:none; border-radius:12px; font-size:1.1rem; cursor:pointer; width:100%; margin:1rem 0;}
-    .btn:disabled {opacity:0.7; cursor:not-allowed;}
-    .progress {height:8px; background:#eee; border-radius:4px; overflow:hidden; margin:1rem 0; display:none;}
-    .progress-bar {height:100%; background:var(--primary); width:0%; transition:0.3s;}
-    .result {margin-top:1.5rem; padding:1.5rem; border-radius:16px; text-align:center; font-weight:bold;}
-    .high {background:#fee2e2; color:var(--danger); border:2px solid #fecaca;}
-    .low {background:#dcfce7; color:var(--success); border:2px solid #bbf7d0;}
-    .mic-btn {background:#dc2626; margin:1rem 0;}
-    .dark-toggle {position:fixed; top:1rem; right:1rem; background:var(--primary); color:white; border:none; padding:0.8rem; border-radius:50%; cursor:pointer;}
-    audio {width:100%; margin:1rem 0;}
-  </style>
-</head>
-<body>
-  <button class="dark-toggle" onclick="document.body.classList.toggle('dark')">
-    <i class="fas fa-moon"></i>
-  </button>
+<script>
+  const lang = new URLSearchParams(location.search).get('lang') || 'en';
+  if (lang !== 'en') {
+    document.querySelectorAll('[data-text]').forEach(el => {
+      const text = el.dataset.text;
+      fetch('/translate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({text, lang})
+      })
+      .then(r => r.json())
+      .then(d => el.innerHTML = d.translated)
+      .catch(() => {});
+    });
+  }
 
-  <div class="container">
-    <div class="header">
-      <h1><i class="fas fa-brain"></i> Parkinson Detector</h1>
-      <p>Upload or record voice • Result in <25s</p>
-    </div>
-
-    <div class="content">
-      <div class="lang-select">
-        <select onchange="location.href='?lang='+this.value">
-          {% for code, name in languages.items() %}
-            <option value="{{ code }}" {% if lang == code %}selected{% endif %}>{{ name }}</option>
-          {% endfor %}
-        </select>
-      </div>
-
-      <form method="post" enctype="multipart/form-data" id="uploadForm">
-        <div class="upload-area" id="dropArea">
-          <p><i class="fas fa-cloud-upload-alt fa-3x"></i></p>
-          <p>Drop file or click (AMR, MP3, WAV)</p>
-          <input type="file" name="file" accept="audio/*" id="fileInput" style="display:none"/>
-        </div>
-
-        <button type="button" class="btn mic-btn" id="recordBtn">
-          <i class="fas fa-microphone"></i> Record
-        </button>
-        <audio id="audioPreview" controls style="display:none"></audio>
-
-        <button type="submit" class="btn" id="analyzeBtn">
-          <span id="btnText">Analyze</span>
-          <span id="loadingText" style="display:none">
-            <i class="fas fa-spinner fa-spin"></i> Processing... (<span id="progressPercent">0</span>%)
-          </span>
-        </button>
-
-        <div class="progress" id="progressBar">
-          <div class="progress-bar" id="progressFill"></div>
-        </div>
-      </form>
-
-      {% if result %}
-        <div class="result {% if result.risk == 'HIGH' %}high{% else %}low{% endif %}" id="resultBox">
-          {% if result.error %}
-            <p data-text="Error: {{ result.error }}"></p>
-          {% else %}
-            <p data-text="Risk Score: <strong>{{ "%.1f"|format(result.risk_score * 100) }}%</strong>"></p>
-            <p data-text="{% if result.risk == 'HIGH' %}HIGH RISK — Consult doctor{% else %}LOW RISK — Healthy{% endif %}"></p>
-          {% endif %}
-        </div>
-      {% endif %}
-    </div>
-  </div>
-
-  <script>
-    const lang = new URLSearchParams(location.search).get('lang') || 'en';
-    const dropArea = document.getElementById('dropArea');
-    const fileInput = document.getElementById('fileInput');
-    const recordBtn = document.getElementById('recordBtn');
-    const audioPreview = document.getElementById('audioPreview');
-    const form = document.getElementById('uploadForm');
-    const progressBar = document.getElementById('progressBar');
-    const progressFill = document.getElementById('progressFill');
-    const progress...
+  // Mic recording (HTTPS only)
+  let recorder, audioBlob;
+  document.getElementById('recordBtn').onclick = async () => {
+    if (!recorder) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+        recorder = new MediaRecorder(stream);
+        const chunks = [];
+        recorder.ondataavailable = e => chunks.push(e.data);
+        recorder.onstop = () => {
+          audioBlob = new Blob(chunks, {type: 'audio/wav'});
+          document.getElementById('audioPreview').src = URL.createObjectURL(audioBlob);
+          document.getElementById('audioPreview').style.display = 'block';
+        };
+        recorder.start();
+        document.getElementById('recordBtn').innerHTML = 'Stop';
+      } catch (e) {
+        alert('Mic access denied. Allow HTTPS mic permission.');
+      }
+    } else {
+      recorder.stop();
+      recorder.stream.getTracks().forEach(t => t.stop());
+      recorder = null;
+      document.getElementById('recordBtn').innerHTML = 'Record';
+    }
+  };
+</script>
