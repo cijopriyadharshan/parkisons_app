@@ -1,48 +1,34 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
-  <title>Parkinson Voice Detector</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Parkinson Detector</title>
   <style>
-    body {font-family: sans-serif; text-align: center; background: #f0f8ff; padding: 2rem;}
-    .container {max-width: 600px; margin: auto; background: white; padding: 2.5rem; border-radius: 16px;}
-    input, button {margin: 0.5rem; padding: 1rem; border-radius: 10px; width: 100%; max-width: 300px;}
-    #record {background: #dc2626; color: white;}
+    body {font-family: Arial; text-align: center; background: #f0f8ff; padding: 2rem;}
+    .container {max-width: 600px; margin: auto; background: white; padding: 2rem; border-radius: 16px;}
+    button {background: #007acc; color: white; padding: 1rem 2rem; border: none; border-radius: 8px;}
     #loading {display: none;}
-    .result {margin-top: 1.5rem; padding: 1.2rem; border-radius: 12px;}
-    .high {background: #fee2e2; color: #dc2626;}
-    .low {background: #dcfce7; color: #16a34a;}
   </style>
 </head>
 <body>
   <div class="container">
-    <h1 data-text="Parkinson Voice Detector">Parkinson Voice Detector</h1>
-    <p data-text="Hold red button & say &quot;Aaaah&quot; for 5 sec">Hold red button & say "Aaaah" for 5 sec</p>
-
-    <input type="text" placeholder="lang: hi, ta, fr..." value="{{ lang }}" id="lang">
-    <button onclick="location.href='/?lang='+document.getElementById('lang').value">Change</button>
-
-    <form method="post" enctype="multipart/form-data" id="form">
-      <input type="file" name="file" accept="audio/*" id="file" style="display:none">
-      <button type="button" id="record">Hold to Record</button>
-      <audio id="audio" controls style="display:none; width:300px"></audio>
-      <button type="submit">
-        <span id="text" data-text="Analyze">Analyze</span>
-        <span id="loading" data-text="Analyzing...">Analyzing...</span>
+    <h1>Parkinson Voice Detector</h1>
+    <form method="post" enctype="multipart/form-data">
+      <input type="file" name="file" accept="audio/*" required>
+      <br><br>
+      <button type="submit" id="btn">
+        <span id="text">Analyze</span>
+        <span id="loading">Processing... (up to 3 min)</span>
       </button>
     </form>
 
     {% if result %}
-      <div class="result {{ 'high' if result.risk == 'HIGH' else 'low' }}">
+      <div style="margin-top: 2rem; padding: 1rem; border-radius: 8px; font-weight: bold;">
         {% if result.error %}
-          <p style="color:red" data-text="Error: {{ result.error }}">Error: {{ result.error }}</p>
+          <p style="color:red">{{ result.error }}</p>
         {% else %}
-          <p data-text="Risk: <strong>{{ "%.1f"|format(result.risk_score * 100) }}%</strong>">
-            Risk: <strong>{{ "%.1f"|format(result.risk_score * 100) }}%</strong>
-          </p>
-          <p data-text="{{ 'HIGH RISK — See doctor' if result.risk == 'HIGH' else 'LOW RISK — Healthy' }}">
-            {{ 'HIGH RISK — See doctor' if result.risk == 'HIGH' else 'LOW RISK — Healthy' }}
+          <p>Risk: <strong>{{ "%.1f"|format(result.risk_score * 100) }}%</strong></p>
+          <p style="color: {% if result.risk == 'HIGH' %}red{% else %}green{% endif %}">
+            {{ result.risk }} RISK
           </p>
         {% endif %}
       </div>
@@ -50,41 +36,7 @@
   </div>
 
   <script>
-    let r, blob;
-    const lang = new URLSearchParams(location.search).get('lang') || 'en';
-    if (lang !== 'en') {
-      document.querySelectorAll('[data-text]').forEach(el => {
-        fetch('/translate', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({text: el.dataset.text, lang})
-        }).then(r => r.json()).then(d => el.innerHTML = d.translated);
-      });
-    }
-
-    document.getElementById('record').onpointerdown = async e => {
-      e.preventDefault();
-      if (r) return;
-      const s = await navigator.mediaDevices.getUserMedia({audio: true});
-      r = new MediaRecorder(s); const c = [];
-      r.ondataavailable = e => c.push(e.data);
-      r.onstop = () => {
-        blob = new Blob(c, {type: 'audio/wav'});
-        const url = URL.createObjectURL(blob);
-        const a = document.getElementById('audio');
-        a.src = url; a.style.display = 'block';
-        const dt = new DataTransfer();
-        dt.items.add(new File([blob], "voice.wav"));
-        document.getElementById('file').files = dt.files;
-        s.getTracks().forEach(t => t.stop());
-        r = null;
-        document.getElementById('record').textContent = 'Hold to Record';
-      };
-      r.start();
-      document.getElementById('record').textContent = 'Recording...';
-    };
-
-    document.getElementById('form').onsubmit = () => {
+    document.querySelector('form').onsubmit = () => {
       document.getElementById('text').style.display = 'none';
       document.getElementById('loading').style.display = 'inline';
     };
