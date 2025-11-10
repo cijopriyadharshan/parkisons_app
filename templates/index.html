@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Parkinson Voice Detector</title>
+  <title>Parkinson Detector</title>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet"/>
   <style>
     :root { --primary: #007acc; --danger: #dc2626; --success: #16a34a; --dark: #1a1a1a; --light: #f8f9fa; }
@@ -26,7 +26,6 @@
     .mic-btn {background:#dc2626; margin:1rem 0;}
     .dark-toggle {position:fixed; top:1rem; right:1rem; background:var(--primary); color:white; border:none; padding:0.8rem; border-radius:50%; cursor:pointer;}
     audio {width:100%; margin:1rem 0;}
-    @media (prefers-color-scheme: dark) { body {background:#0f0f0f; color:#eee;} .container {background:#1a1a1a;} }
   </style>
 </head>
 <body>
@@ -52,17 +51,17 @@
       <form method="post" enctype="multipart/form-data" id="uploadForm">
         <div class="upload-area" id="dropArea">
           <p><i class="fas fa-cloud-upload-alt fa-3x"></i></p>
-          <p>Drop file or click to upload (AMR, MP3, WAV)</p>
+          <p>Drop file or click (AMR, MP3, WAV)</p>
           <input type="file" name="file" accept="audio/*" id="fileInput" style="display:none"/>
         </div>
 
         <button type="button" class="btn mic-btn" id="recordBtn">
-          <i class="fas fa-microphone"></i> Record Voice
+          <i class="fas fa-microphone"></i> Record
         </button>
         <audio id="audioPreview" controls style="display:none"></audio>
 
         <button type="submit" class="btn" id="analyzeBtn">
-          <span id="btnText">Analyze Voice</span>
+          <span id="btnText">Analyze</span>
           <span id="loadingText" style="display:none">
             <i class="fas fa-spinner fa-spin"></i> Processing... (<span id="progressPercent">0</span>%)
           </span>
@@ -87,7 +86,7 @@
   </div>
 
   <script>
-    const lang = '{{ lang }}';
+    const lang = new URLSearchParams(location.search).get('lang') || 'en';
     const dropArea = document.getElementById('dropArea');
     const fileInput = document.getElementById('fileInput');
     const recordBtn = document.getElementById('recordBtn');
@@ -95,92 +94,4 @@
     const form = document.getElementById('uploadForm');
     const progressBar = document.getElementById('progressBar');
     const progressFill = document.getElementById('progressFill');
-    const progressPercent = document.getElementById('progressPercent');
-    const btnText = document.getElementById('btnText');
-    const loadingText = document.getElementById('loadingText');
-    let recorder, audioBlob;
-
-    // Drag & drop
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(event => {
-      dropArea.addEventListener(event, e => { e.preventDefault(); e.stopPropagation(); });
-    });
-    ['dragenter', 'dragover'].forEach(event => {
-      dropArea.addEventListener(event, () => dropArea.classList.add('dragover'));
-    });
-    ['dragleave', 'drop'].forEach(event => {
-      dropArea.addEventListener(event, () => dropArea.classList.remove('dragover'));
-    });
-    dropArea.addEventListener('drop', e => {
-      const dt = e.dataTransfer;
-      const files = dt.files;
-      fileInput.files = files;
-    });
-    dropArea.addEventListener('click', () => fileInput.click());
-
-    // Record
-    recordBtn.onclick = async () => {
-      if (!recorder) {
-        const stream = await navigator.mediaDevices.getUserMedia({audio:true});
-        recorder = new MediaRecorder(stream);
-        const chunks = [];
-        recorder.ondataavailable = e => chunks.push(e.data);
-        recorder.onstop = () => {
-          audioBlob = new Blob(chunks, {type:'audio/wav'});
-          const url = URL.createObjectURL(audioBlob);
-          audioPreview.src = url; audioPreview.style.display = 'block';
-          const data = new FormData();
-          data.append('audio', audioBlob, 'recording.wav');
-          form.onsubmit = e => { e.preventDefault(); submitForm(data); };
-        };
-        recorder.start();
-        recordBtn.innerHTML = '<i class="fas fa-stop"></i> Stop';
-      } else {
-        recorder.stop();
-        recorder.stream.getTracks().forEach(t => t.stop());
-        recorder = null;
-        recordBtn.innerHTML = '<i class="fas fa-microphone"></i> Record Voice';
-      }
-    };
-
-    // Submit with progress
-    function submitForm(formData) {
-      btnText.style.display = 'none';
-      loadingText.style.display = 'inline';
-      progressBar.style.display = 'block';
-
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', '/', true);
-      xhr.upload.onprogress = e => {
-        if (e.lengthComputable) {
-          const percent = Math.round((e.loaded / e.total) * 100);
-          progressFill.style.width = percent + '%';
-          progressPercent.textContent = percent;
-        }
-      };
-      xhr.onload = () => location.reload();
-      xhr.send(formData);
-    }
-
-    form.onsubmit = e => {
-      e.preventDefault();
-      const file = fileInput.files[0] || audioBlob;
-      if (!file) return alert('Please select or record audio');
-      const data = new FormData();
-      data.append(file === audioBlob ? 'audio' : 'file', file, file.name || 'recording.wav');
-      submitForm(data);
-    };
-
-    // Auto-translate
-    if (lang !== 'en') {
-      document.querySelectorAll('[data-text]').forEach(el => {
-        const text = el.dataset.text;
-        fetch('/translate', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({text, lang})
-        }).then(r => r.json()).then(d => el.innerHTML = d.translated);
-      });
-    }
-  </script>
-</body>
-</html>
+    const progress...
