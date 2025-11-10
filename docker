@@ -7,14 +7,17 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-# Upgrade pip + install build tools
+# Install build tools FIRST
 RUN pip install --upgrade pip setuptools wheel
 
+# Copy requirements and install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy project files
 COPY . .
 
 EXPOSE 5000
 
+# Run Flask app
 CMD ["python", "app.py"]
