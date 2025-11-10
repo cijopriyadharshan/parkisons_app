@@ -45,32 +45,32 @@ def health():
 async def predict(file: UploadFile = File(...)):
     try:
         contents = await file.read()
-        if len(contents) == 0 or len(contents) > 50 * 1024 * 1024:
+        if not contents or len(contents) > 50 * 1024 * 1024:
             return {"error": "Invalid file"}
 
         suffix = os.path.splitext(file.filename)[1].lower()
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_in:
-            tmp_in.write(contents); input_path = tmp_in.name
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_out:
-            output_path = tmp_out.name
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as f_in:
+            f_in.write(contents); in_path = f_in.name
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as f_out:
+            out_path = f_out.name
 
-        cmd = ["ffmpeg", "-y", "-i", input_path, "-ar", "16000", "-ac", "1", "-f", "wav", output_path]
+        cmd = ["ffmpeg", "-y", "-i", in_path, "-ar", "16000", "-ac", "1", out_path]
         result = subprocess.run(cmd, capture_output=True, text=True)
-        os.unlink(input_path)
+        os.unlink(in_path)
         if result.returncode != 0:
-            os.unlink(output_path)
-            return {"error": "Audio conversion failed"}
+            os.unlink(out_path)
+            return {"error": "Conversion failed"}
 
-        y, sr = librosa.load(output_path, sr=16000)
-        os.unlink(output_path)
+        y, _ = librosa.load(out_path, sr=16000)
+        os.unlink(out_path)
         if len(y) < 16000:
             return {"error": "Say 'Aaaah' for 5 seconds"}
 
-        feats = smile.process_signal(y, sampling_rate=16000)
-        feat_vec = np.zeros(754)
-        feat_vec[:min(754, len(feats.columns))] = feats.iloc[0].values[:754]
+        feats = smile.process_signal(y, 16000)
+        vec = np.zeros(754)
+        vec[:min(754, len(feats.columns))] = feats.iloc[0].values[:754]
 
-        X = scaler.transform([feat_vec])
+        X = scaler.transform([vec])
         X_sel = selector.transform(X)
         prob = model.predict_proba(X_sel)[0, 1]
         risk = "HIGH" if prob >= threshold else "LOW"
@@ -93,10 +93,10 @@ def index():
             file.stream.seek(0, 2); size = file.stream.tell(); file.stream.seek(0)
             if size <= 50 * 1024 * 1024:
                 try:
-                    resp = requests.post(API_URL, files={'file': (file.filename, file.stream, file.content_type)}, timeout=180)
-                    result = resp.json()
+                    r = requests.post(API_URL, files={'file': (file.filename, file.stream, file.content_type)}, timeout=180)
+                    result = r.json()
                 except:
-                    result = {"error": "Server error"}
+                    result = {"error": "Try again"}
             else:
                 result = {"error": "File too large"}
         else:
@@ -126,7 +126,7 @@ for _ in range(60):
 else:
     exit(1)
 
-# === Run with gunicorn on Render ===
+# === Run ===
 if __name__ == "__main__":
     if os.getenv("RENDER"):
         subprocess.run(["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:5000", "app:flask_app"])
