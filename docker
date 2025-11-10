@@ -1,23 +1,17 @@
+# Dockerfile
 FROM python:3.10-slim
 
-# Install system dependencies
+# Install system deps + FFmpeg
 RUN apt-get update && \
-    apt-get install -y ffmpeg libsndfile1 build-essential && \
+    apt-get install -y ffmpeg libopencore-amrnb0 libopencore-amrwb0 && \
     rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
-
-# Install build tools FIRST
+# Force install pip + setuptools
 RUN pip install --upgrade pip setuptools wheel
 
-# Copy requirements and install Python dependencies
+WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy project files
 COPY . .
-
-EXPOSE 5000
-
-# Run Flask app
 CMD ["python", "app.py"]
