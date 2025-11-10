@@ -1,9 +1,12 @@
 services:
   - type: web
-    name: parkinsons-detector
+    name: parkisons_app
     env: docker
     region: oregon
     plan: free
     dockerfilePath: ./Dockerfile
     autoDeploy: true
     healthCheckPath: /
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.14  # Exact stable version
