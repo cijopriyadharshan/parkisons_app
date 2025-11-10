@@ -1,10 +1,9 @@
 fastapi
 uvicorn
-flask
-requests
 joblib
 librosa
 numpy
 scikit-learn
 xgboost
 python-multipart
+jinja2
