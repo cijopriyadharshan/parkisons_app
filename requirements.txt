@@ -8,3 +8,4 @@ librosa
 numpy
 scikit-learn
 xgboost
+python-multipart        
