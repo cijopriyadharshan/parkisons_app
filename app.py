@@ -25,7 +25,7 @@ try:
     threshold = artifacts['threshold']
     print("Model loaded.")
 except Exception as e:
-    print("Model load failed:", e)
+    print("Model load error:", e)
     exit(1)
 
 # === openSMILE ===
@@ -34,7 +34,7 @@ smile = opensmile.Smile(
     feature_level=opensmile.FeatureLevel.Functionals,
 )
 
-# === Translator (Supports 100+ languages) ===
+# === Translator ===
 translator = Translator()
 
 # === FastAPI ===
@@ -135,7 +135,7 @@ def translate():
         translated = translator.translate(text, dest=target).text
         return jsonify({"translated": translated})
     except:
-        return jsonify({"translated": text})  # fallback to English
+        return jsonify({"translated": text})
 
 # === Start FastAPI ===
 def run_fastapi():
@@ -156,5 +156,14 @@ else:
     print("FastAPI failed to start!")
     exit(1)
 
+# === Production: gunicorn ===
 if __name__ == "__main__":
-    flask_app.run(host="0.0.0.0", port=5000)
+    import os
+    if os.getenv('RENDER'):
+        import subprocess
+        subprocess.run([
+            "gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker",
+            "--bind", "0.0.0.0:5000", "app:flask_app"
+        ])
+    else:
+        flask_app.run(host="0.0.0.0", port=5000)
