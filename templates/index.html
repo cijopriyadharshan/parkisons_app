@@ -1,47 +1,186 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Parkinson Detector</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Parkinson Voice Detector</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet"/>
   <style>
-    body {font-family: Arial; text-align: center; background: #f0f8ff; padding: 2rem;}
-    .container {max-width: 600px; margin: auto; background: white; padding: 2rem; border-radius: 16px;}
-    button {background: #007acc; color: white; padding: 1rem 2rem; border: none; border-radius: 8px;}
-    #loading {display: none;}
+    :root { --primary: #007acc; --danger: #dc2626; --success: #16a34a; --dark: #1a1a1a; --light: #f8f9fa; }
+    body {font-family: 'Segoe UI', sans-serif; margin:0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height:100vh; transition:0.3s;}
+    body.dark {background: #0f0f0f; color:#eee;}
+    .container {max-width: 500px; margin: 2rem auto; background: white; border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.1); overflow:hidden;}
+    .header {background: var(--primary); color:white; padding:1.5rem; text-align:center;}
+    .content {padding:2rem;}
+    .lang-select {margin-bottom:1rem; text-align:center;}
+    select {padding:0.5rem 1rem; border-radius:8px; border:none; background:#f1f1f1;}
+    .upload-area {border:3px dashed #ccc; border-radius:16px; padding:2rem; text-align:center; margin:1rem 0; transition:0.3s;}
+    .upload-area.dragover {border-color:var(--primary); background:#f0f8ff;}
+    .btn {background:var(--primary); color:white; padding:1rem 2rem; border:none; border-radius:12px; font-size:1.1rem; cursor:pointer; width:100%; margin:1rem 0;}
+    .btn:disabled {opacity:0.7; cursor:not-allowed;}
+    .progress {height:8px; background:#eee; border-radius:4px; overflow:hidden; margin:1rem 0; display:none;}
+    .progress-bar {height:100%; background:var(--primary); width:0%; transition:0.3s;}
+    .result {margin-top:1.5rem; padding:1.5rem; border-radius:16px; text-align:center; font-weight:bold;}
+    .high {background:#fee2e2; color:var(--danger); border:2px solid #fecaca;}
+    .low {background:#dcfce7; color:var(--success); border:2px solid #bbf7d0;}
+    .mic-btn {background:#dc2626; margin:1rem 0;}
+    .dark-toggle {position:fixed; top:1rem; right:1rem; background:var(--primary); color:white; border:none; padding:0.8rem; border-radius:50%; cursor:pointer;}
+    audio {width:100%; margin:1rem 0;}
+    @media (prefers-color-scheme: dark) { body {background:#0f0f0f; color:#eee;} .container {background:#1a1a1a;} }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Parkinson Voice Detector</h1>
-    <p>Upload voice (AMR, MP3, WAV) — <strong>Result in &lt; 25 sec</strong></p>
-    <form method="post" enctype="multipart/form-data">
-      <input type="file" name="file" accept="audio/*" required>
-      <br><br>
-      <button type="submit" id="btn">
-        <span id="text">Analyze</span>
-        <span id="loading">Processing... (max 25 sec)</span>
-      </button>
-    </form>
+  <button class="dark-toggle" onclick="document.body.classList.toggle('dark')">
+    <i class="fas fa-moon"></i>
+  </button>
 
-    {% if result %}
-      <div style="margin-top: 2rem; padding: 1rem; border-radius: 8px; font-weight: bold;">
-        {% if result.error %}
-          <p style="color:red">{{ result.error }}</p>
-        {% else %}
-          <p>Risk Score: <strong>{{ "%.1f"|format(result.risk_score * 100) }}%</strong></p>
-          <p style="color: {% if result.risk == 'HIGH' %}red{% else %}green{% endif %}">
-            {{ result.risk }} RISK
-          </p>
-        {% endif %}
+  <div class="container">
+    <div class="header">
+      <h1><i class="fas fa-brain"></i> Parkinson Detector</h1>
+      <p>Upload or record voice • Result in <25s</p>
+    </div>
+
+    <div class="content">
+      <div class="lang-select">
+        <select onchange="location.href='?lang='+this.value">
+          {% for code, name in languages.items() %}
+            <option value="{{ code }}" {% if lang == code %}selected{% endif %}>{{ name }}</option>
+          {% endfor %}
+        </select>
       </div>
-    {% endif %}
+
+      <form method="post" enctype="multipart/form-data" id="uploadForm">
+        <div class="upload-area" id="dropArea">
+          <p><i class="fas fa-cloud-upload-alt fa-3x"></i></p>
+          <p>Drop file or click to upload (AMR, MP3, WAV)</p>
+          <input type="file" name="file" accept="audio/*" id="fileInput" style="display:none"/>
+        </div>
+
+        <button type="button" class="btn mic-btn" id="recordBtn">
+          <i class="fas fa-microphone"></i> Record Voice
+        </button>
+        <audio id="audioPreview" controls style="display:none"></audio>
+
+        <button type="submit" class="btn" id="analyzeBtn">
+          <span id="btnText">Analyze Voice</span>
+          <span id="loadingText" style="display:none">
+            <i class="fas fa-spinner fa-spin"></i> Processing... (<span id="progressPercent">0</span>%)
+          </span>
+        </button>
+
+        <div class="progress" id="progressBar">
+          <div class="progress-bar" id="progressFill"></div>
+        </div>
+      </form>
+
+      {% if result %}
+        <div class="result {% if result.risk == 'HIGH' %}high{% else %}low{% endif %}" id="resultBox">
+          {% if result.error %}
+            <p data-text="Error: {{ result.error }}"></p>
+          {% else %}
+            <p data-text="Risk Score: <strong>{{ "%.1f"|format(result.risk_score * 100) }}%</strong>"></p>
+            <p data-text="{% if result.risk == 'HIGH' %}HIGH RISK — Consult doctor{% else %}LOW RISK — Healthy{% endif %}"></p>
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
   </div>
 
   <script>
-    document.querySelector('form').onsubmit = () => {
-      document.getElementById('text').style.display = 'none';
-      document.getElementById('loading').style.display = 'inline';
+    const lang = '{{ lang }}';
+    const dropArea = document.getElementById('dropArea');
+    const fileInput = document.getElementById('fileInput');
+    const recordBtn = document.getElementById('recordBtn');
+    const audioPreview = document.getElementById('audioPreview');
+    const form = document.getElementById('uploadForm');
+    const progressBar = document.getElementById('progressBar');
+    const progressFill = document.getElementById('progressFill');
+    const progressPercent = document.getElementById('progressPercent');
+    const btnText = document.getElementById('btnText');
+    const loadingText = document.getElementById('loadingText');
+    let recorder, audioBlob;
+
+    // Drag & drop
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(event => {
+      dropArea.addEventListener(event, e => { e.preventDefault(); e.stopPropagation(); });
+    });
+    ['dragenter', 'dragover'].forEach(event => {
+      dropArea.addEventListener(event, () => dropArea.classList.add('dragover'));
+    });
+    ['dragleave', 'drop'].forEach(event => {
+      dropArea.addEventListener(event, () => dropArea.classList.remove('dragover'));
+    });
+    dropArea.addEventListener('drop', e => {
+      const dt = e.dataTransfer;
+      const files = dt.files;
+      fileInput.files = files;
+    });
+    dropArea.addEventListener('click', () => fileInput.click());
+
+    // Record
+    recordBtn.onclick = async () => {
+      if (!recorder) {
+        const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+        recorder = new MediaRecorder(stream);
+        const chunks = [];
+        recorder.ondataavailable = e => chunks.push(e.data);
+        recorder.onstop = () => {
+          audioBlob = new Blob(chunks, {type:'audio/wav'});
+          const url = URL.createObjectURL(audioBlob);
+          audioPreview.src = url; audioPreview.style.display = 'block';
+          const data = new FormData();
+          data.append('audio', audioBlob, 'recording.wav');
+          form.onsubmit = e => { e.preventDefault(); submitForm(data); };
+        };
+        recorder.start();
+        recordBtn.innerHTML = '<i class="fas fa-stop"></i> Stop';
+      } else {
+        recorder.stop();
+        recorder.stream.getTracks().forEach(t => t.stop());
+        recorder = null;
+        recordBtn.innerHTML = '<i class="fas fa-microphone"></i> Record Voice';
+      }
     };
+
+    // Submit with progress
+    function submitForm(formData) {
+      btnText.style.display = 'none';
+      loadingText.style.display = 'inline';
+      progressBar.style.display = 'block';
+
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/', true);
+      xhr.upload.onprogress = e => {
+        if (e.lengthComputable) {
+          const percent = Math.round((e.loaded / e.total) * 100);
+          progressFill.style.width = percent + '%';
+          progressPercent.textContent = percent;
+        }
+      };
+      xhr.onload = () => location.reload();
+      xhr.send(formData);
+    }
+
+    form.onsubmit = e => {
+      e.preventDefault();
+      const file = fileInput.files[0] || audioBlob;
+      if (!file) return alert('Please select or record audio');
+      const data = new FormData();
+      data.append(file === audioBlob ? 'audio' : 'file', file, file.name || 'recording.wav');
+      submitForm(data);
+    };
+
+    // Auto-translate
+    if (lang !== 'en') {
+      document.querySelectorAll('[data-text]').forEach(el => {
+        const text = el.dataset.text;
+        fetch('/translate', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({text, lang})
+        }).then(r => r.json()).then(d => el.innerHTML = d.translated);
+      });
+    }
   </script>
 </body>
 </html>
