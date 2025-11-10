@@ -1,11 +1,11 @@
 fastapi
 uvicorn
 flask
-gunicorn
 requests
 joblib
 librosa
 numpy
 scikit-learn
 xgboost
-python-multipart        
+python-multipart
+googletrans==4.0.0-rc1
