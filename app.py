@@ -1,6 +1,5 @@
 # app.py
 import os
-import threading
 import subprocess
 import tempfile
 import librosa
@@ -10,7 +9,6 @@ import requests
 from flask import Flask, render_template, request, jsonify
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-import uvicorn
 from deep_translator import GoogleTranslator
 
 # === LOAD MODEL ===
@@ -57,7 +55,7 @@ async def predict(file: UploadFile = File(...)):
             output_path = tmp_out.name
 
         cmd = ["ffmpeg", "-y", "-i", input_path, "-ar", "22050", "-ac", "1", output_path]
-        result = subprocess.run(cmd, capture_output=True, text=True)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         os.unlink(input_path)
         if result.returncode != 0:
             os.unlink(output_path)
@@ -93,10 +91,12 @@ def index():
         else:
             files = {'file': (file.filename, file.stream, file.content_type)} if file else None
             try:
-                response = requests.post(API_URL, files=files, timeout=180)
+                response = requests.post(API_URL, files=files, timeout=30)
                 result = response.json()
+            except requests.exceptions.Timeout:
+                result = {"error": "Timeout. Try <5 sec audio."}
             except Exception as e:
-                result = {"error": f"Request failed: {str(e)}"}
+                result = {"error": f"Failed: {str(e)}"}
     return render_template("index.html", result=result, lang=lang, languages=LANGUAGES)
 
 @flask_app.route("/translate", methods=["POST"])
@@ -105,7 +105,3 @@ def translate():
     target = request.json['lang']
     translated = translate_text(text, target)
     return jsonify({"translated": translated})
-
-if __name__ == "__main__":
-    threading.Thread(target=lambda: uvicorn.run(fastapi_app, host="0.0.0.0", port=8000), daemon=True).start()
-    flask_app.run(host="0.0.0.0", port=5000)
