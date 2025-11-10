@@ -4,12 +4,12 @@
   <title>Parkinson Detector</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    body {font-family: 'Segoe UI'; text-align: center; background: linear-gradient(135deg, #667eea, #764ba2); margin: 0; padding: 2rem; color: #fff;}
-    .container {max-width: 600px; margin: 2rem auto; background: rgba(255,255,255,0.95); padding: 2.5rem; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); color: #333;}
-    h1 {color: #5a67d8;}
-    input[type="file"] {margin: 1rem 0; padding: 1rem; border: 2px dashed #5a67d8; border-radius: 12px; width: 100%;}
-    button {background: #5a67d8; color: white; padding: 1rem 2.5rem; border: none; border-radius: 12px; font-size: 1.1rem; cursor: pointer;}
-    .result {margin-top: 2rem; padding: 1rem; border-radius: 12px; font-weight: bold;}
+    body {font-family: 'Segoe UI'; text-align: center; background: #f0f8ff; padding:  2rem;}
+    .container {max-width: 600px; margin: auto; background: white; padding: 2.5rem; border-radius: 16px;}
+    select, button {margin: 0.5rem; padding: 0.8rem; border-radius: 8px;}
+    #record {background: #dc2626; color: white;}
+    #loading {display: none;}
+    .result {margin-top: 1rem; padding: 1rem; border-radius: 8px;}
     .high {background: #fee2e2; color: #dc2626;}
     .low {background: #dcfce7; color: #16a34a;}
   </style>
@@ -17,25 +17,78 @@
 <body>
   <div class="container">
     <h1>Parkinson Voice Detector</h1>
-    <p>Upload any voice file (AMR, MP3, WAV, M4A, OGG, FLAC, AAC)</p>
+    
+    <select onchange="location.href='?lang='+this.value">
+      {% for code, name in languages.items() %}
+        <option value="{{ code }}" {% if lang == code %}selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+
     <form method="post" enctype="multipart/form-data">
-      <input type="file" name="file" accept="audio/*" required>
-      <br>
-      <button type="submit">Analyze</button>
+      <input type="file" name="file" accept="audio/*">
+      <br><br>
+      <button type="button" id="record">Record Voice</button>
+      <audio id="audio" controls style="display:none"></audio>
+      <br><br>
+      <button type="submit" id="btn">
+        <span id="text">Analyze</span>
+        <span id="loading">Processing...</span>
+      </button>
     </form>
 
     {% if result %}
-      <div class="result {% if result.risk == 'HIGH' %}high{% else %}low{% endif %}">
+      <div class="result {% if result.risk == 'HIGH' %}high{% else %}low{% endif %}" id="result">
         {% if result.error %}
-          <p>Error: {{ result.error }}</p>
+          <p style="color:red" data-text="Error: {{ result.error }}"></p>
         {% else %}
-          <p>Risk Score: <strong>{{ "%.1f"|format(result.risk_score * 100) }}%</strong></p>
-          <p>
-            {% if result.risk == 'HIGH' %}HIGH RISK — Consult a doctor{% else %}LOW RISK — Healthy voice{% endif %}
-          </p>
+          <p data-text="Risk Score: <strong>{{ "%.1f"|format(result.risk_score * 100) }}%</strong>"></p>
+          <p data-text="{% if result.risk == 'HIGH' %}HIGH RISK — Consult doctor{% else %}LOW RISK — Healthy{% endif %}"></p>
         {% endif %}
       </div>
     {% endif %}
   </div>
+
+  <script>
+    let recorder, audioBlob;
+    document.getElementById('record').onclick = async () => {
+      const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+      recorder = new MediaRecorder(stream);
+      const chunks = [];
+      recorder.ondataavailable = e => chunks.push(e.data);
+      recorder.onstop = () => {
+        audioBlob = new Blob(chunks, {type: 'audio/wav'});
+        const url = URL.createObjectURL(audioBlob);
+        const audio = document.getElementById('audio');
+        audio.src = url; audio.style.display = 'block';
+        const form = document.querySelector('form');
+        const data = new FormData(form);
+        data.append('audio', audioBlob, 'recording.wav');
+        form.onsubmit = (e) => { e.preventDefault(); form.submit(); };
+      };
+      recorder.start();
+      document.getElementById('record').textContent = 'Stop';
+      document.getElementById('record').onclick = () => {
+        recorder.stop(); stream.getTracks().forEach(t => t.stop());
+        document.getElementById('record').textContent = 'Record Voice';
+      };
+    };
+
+    // Auto-translate on load
+    const lang = new URLSearchParams(location.search).get('lang') || 'en';
+    if (lang !== 'en') {
+      document.querySelectorAll('[data-text]').forEach(el => {
+        fetch('/translate', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({text: el.dataset.text, lang: lang})
+        }).then(r => r.json()).then(data => el.innerHTML = data.translated);
+      });
+    }
+
+    document.querySelector('form').onsubmit = () => {
+      document.getElementById('text').style.display = 'none';
+      document.getElementById('loading').style.display = 'inline';
+    };
+  </script>
 </body>
 </html>
