@@ -18,19 +18,15 @@ scaler = artifacts['scaler']
 selector = artifacts['selector']
 threshold = artifacts['threshold']
 
-# === TRANSLATOR (FAST + FALLBACK) ===
+# === TRANSLATOR ===
 def translate_text(text, target_lang):
-    if target_lang == 'en':
-        return text
-    try:
-        return GoogleTranslator(source='en', target=target_lang).translate(text)
-    except:
-        return text  # fallback
+    if target_lang == 'en': return text
+    try: return GoogleTranslator(source='en', target=target_lang).translate(text)
+    except: return text
 
-# === EXTRACT 752 FEATURES ===
+# === EXTRACT FEATURES ===
 def extract_features(y, sr):
-    if len(y) == 0:
-        return np.zeros(752)
+    if len(y) == 0: return np.zeros(752)
     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
     mfcc_mean = mfcc.mean(axis=1)
     mfcc_std = mfcc.std(axis=1)
@@ -41,14 +37,14 @@ def extract_features(y, sr):
     full[:len(feats)] = feats
     return full
 
-# === FASTAPI ===
+# === FASTAPI (BACKGROUND) ===
 fastapi_app = FastAPI()
 fastapi_app.add_middleware(CORSMiddleware, allow_origins=["*"])
 
 @fastapi_app.post("/predict")
 async def predict(file: UploadFile = File(...)):
     try:
-        contents = await fileいずれ.read()
+        contents = await file.read()
         suffix = os.path.splitext(file.filename)[1].lower()
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_in:
             tmp_in.write(contents); input_path = tmp_in.name
@@ -63,7 +59,7 @@ async def predict(file: UploadFile = File(...)):
             return {"error": "FFmpeg failed"}
 
         y, sr = librosa.load(output_path, sr=22050)
-        y = y[:5 * sr]  # 5 sec max
+        y = y[:5 * sr]
         os.unlink(output_path)
 
         feats = extract_features(y, sr)
@@ -73,41 +69,46 @@ async def predict(file: UploadFile = File(...)):
         risk = "HIGH" if prob >= threshold else "LOW"
         return {"risk_score": round(prob, 3), "risk": risk}
     except Exception as e:
-        return {"error": f"Error: {str(e)}"}
+        return {"error": str(e)}
 
-# === FLASK ===
-flask_app = Flask(__name__)
+# === FLASK (MAIN APP) ===
+app = Flask(__name__)  # ← THIS IS THE MAIN APP NOW
 API_URL = "http://localhost:8000/predict"
 
-LANGUAGES = {
-    'en': 'English',
-    'hi': 'हिंदी',
-    'ta': 'தமிழ்',
-    'bn': 'বাংলা'
-}
+LANGUAGES = {'en': 'English', 'hi': 'हिंदी', 'ta': 'தமிழ்', 'bn': 'বাংলা'}
 
-@flask_app.route("/", methods=["GET", "POST"])
+@app.route("/", methods=["GET", "POST"])
 def index():
     lang = request.args.get('lang', 'en')
     result = None
     if request.method == "POST":
         file = request.files.get("file") or request.files.get("audio")
         if file and file.content_length > 50 * 1024 * 1024:
-            result = {"error": "File too large. Max 50MB."}
+            result = {"error": "File too large"}
         else:
             files = {'file': (file.filename, file.stream, file.content_type)} if file else None
             try:
                 response = requests.post(API_URL, files=files, timeout=30)
                 result = response.json()
-            except requests.exceptions.Timeout:
-                result = {"error": "Timeout. Try <5 sec audio."}
-            except Exception as e:
-                result = {"error": f"Failed: {str(e)}"}
+            except:
+                result = {"error": "Processing failed"}
     return render_template("index.html", result=result, lang=lang, languages=LANGUAGES)
 
-@flask_app.route("/translate", methods=["POST"])
+@app.route("/translate", methods=["POST"])
 def translate():
     text = request.json['text']
     target = request.json['lang']
-    translated = translate_text(text, target)
-    return jsonify({"translated": translated})
+    return jsonify({"translated": translate_text(text, target)})
+
+# === MOUNT FASTAPI ON FLASK ===
+from werkzeug.middleware.dispatcher import DispatcherMiddleware
+from fastapi.middleware.wsgi import WSGIMiddleware
+
+app.wsgi_app = DispatcherMiddleware(app.wsgi_app, {
+    '/api': fastapi_app  # FastAPI at /api/predict
+})
+
+# === SERVE STATIC (IF NEEDED) ===
+@app.route('/static/<path:path>')
+def send_static(path):
+    return send_from_directory('static', path)
