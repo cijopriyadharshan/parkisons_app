@@ -2,6 +2,7 @@
 <html>
 <head>
   <title>Parkinson Detector</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     body {font-family: Arial; text-align: center; background: #f0f8ff; padding: 2rem;}
     .container {max-width: 600px; margin: auto; background: white; padding: 2rem; border-radius: 16px;}
@@ -12,12 +13,13 @@
 <body>
   <div class="container">
     <h1>Parkinson Voice Detector</h1>
+    <p>Upload voice (AMR, MP3, WAV) — <strong>Result in &lt; 25 sec</strong></p>
     <form method="post" enctype="multipart/form-data">
       <input type="file" name="file" accept="audio/*" required>
       <br><br>
       <button type="submit" id="btn">
         <span id="text">Analyze</span>
-        <span id="loading">Processing... (up to 3 min)</span>
+        <span id="loading">Processing... (max 25 sec)</span>
       </button>
     </form>
 
@@ -26,7 +28,7 @@
         {% if result.error %}
           <p style="color:red">{{ result.error }}</p>
         {% else %}
-          <p>Risk: <strong>{{ "%.1f"|format(result.risk_score * 100) }}%</strong></p>
+          <p>Risk Score: <strong>{{ "%.1f"|format(result.risk_score * 100) }}%</strong></p>
           <p style="color: {% if result.risk == 'HIGH' %}red{% else %}green{% endif %}">
             {{ result.risk }} RISK
           </p>
