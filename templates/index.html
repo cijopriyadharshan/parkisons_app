@@ -80,6 +80,8 @@
   </div>
 
   <script>
+    let recorder, audioBlob;
+
     // Translation
     const lang = new URLSearchParams(location.search).get('lang') || 'en';
     if (lang !== 'en') {
@@ -97,7 +99,6 @@
     }
 
     // Mic recording
-    let recorder, audioBlob;
     document.getElementById('recordBtn').onclick = async () => {
       if (!recorder) {
         try {
@@ -124,14 +125,18 @@
       }
     };
 
-    // Submit recorded audio
+    // Submit with recorded audio
     document.getElementById('uploadForm').onsubmit = (e) => {
       if (audioBlob) {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.name = 'file';
-        input.files = new FileList([audioBlob], 'recording.wav');
-        e.target.appendChild(input);
+        e.preventDefault();
+        const data = new FormData();
+        data.append('file', audioBlob, 'recording.wav');
+        document.getElementById('btnText').style.display = 'none';
+        document.getElementById('loadingText').style.display = 'inline';
+        document.getElementById('progressBar').style.display = 'block';
+        fetch('/', {method: 'POST', body: data})
+          .then(r => r.text())
+          .then(html => document.body.innerHTML = html);
       }
     };
   </script>
