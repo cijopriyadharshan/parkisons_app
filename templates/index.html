@@ -13,7 +13,9 @@
     .content {padding:2rem;}
     .lang-select {margin-bottom:1rem; text-align:center;}
     select {padding:0.5rem 1rem; border-radius:8px; border:none; background:#f1f1f1;}
-    .upload-area {border:3px dashed #ccc; border-radius:16px; padding:2rem; text-align:center; margin:1rem 0;}
+    .upload-area {border:3px dashed #ccc; border-radius:16px; padding:2rem; text-align:center; margin:1rem 0; transition:0.2s ease;}
+    .upload-area.dragover {border-color: var(--primary); background: rgba(0, 122, 204, 0.08);}
+    .file-name {margin-top:0.75rem; font-size:0.9rem; color:#555;}
     .btn {background:var(--primary); color:white; padding:1rem 2rem; border:none; border-radius:12px; font-size:1.1rem; cursor:pointer; width:100%; margin:1rem 0;}
     .btn:disabled {opacity:0.7;}
     .progress {height:8px; background:#eee; border-radius:4px; overflow:hidden; margin:1rem 0; display:none;}
@@ -45,6 +47,7 @@
         <div class="upload-area" id="dropArea">
           <p data-text="Drop file or click (AMR, MP3, WAV)">Drop file or click (AMR, MP3, WAV)</p>
           <input type="file" name="file" accept="audio/*" id="fileInput" style="display:none"/>
+          <div class="file-name" id="fileName" data-text="No file selected">No file selected</div>
         </div>
 
         <button type="button" class="btn mic-btn" id="recordBtn">
@@ -62,83 +65,279 @@
         </div>
       </form>
 
-      {% if result %}
-        <div class="result {% if result.risk == 'HIGH' %}high{% else %}low{% endif %}">
-          {% if result.error %}
-            <p data-text="{{ result.error }}">{{ result.error }}</p>
-          {% else %}
-            <p data-text="Risk Score: <strong>{{ "%.1f"|format(result.risk_score * 100) }}%</strong>">
-              Risk Score: <strong>{{ "%.1f"|format(result.risk_score * 100) }}%</strong>
-            </p>
-            <p data-text="{% if result.risk == 'HIGH' %}HIGH RISK — Consult doctor{% else %}LOW RISK — Healthy{% endif %}">
-              {% if result.risk == 'HIGH' %}HIGH RISK — Consult doctor{% else %}LOW RISK — Healthy{% endif %}
-            </p>
-          {% endif %}
-        </div>
-      {% endif %}
+      <div id="resultContainer">
+        {% if result %}
+          <div class="result {% if result.error %}high{% elif result.risk == 'HIGH' %}high{% else %}low{% endif %}">
+            {% if result.error %}
+              <p data-text="{{ result.error }}">{{ result.error }}</p>
+            {% else %}
+              <p data-text="Risk Score: <strong>{{ "%.1f"|format(result.risk_score * 100) }}%</strong>">
+                Risk Score: <strong>{{ "%.1f"|format(result.risk_score * 100) }}%</strong>
+              </p>
+              <p data-text="{% if result.risk == 'HIGH' %}HIGH RISK — Consult doctor{% else %}LOW RISK — Healthy{% endif %}">
+                {% if result.risk == 'HIGH' %}HIGH RISK — Consult doctor{% else %}LOW RISK — Healthy{% endif %}
+              </p>
+            {% endif %}
+          </div>
+        {% endif %}
+      </div>
     </div>
   </div>
 
   <script>
-    let recorder, audioBlob;
+    document.addEventListener('DOMContentLoaded', () => {
+      let recorder = null;
+      let audioBlob = null;
+      let progressTimer = null;
+      let pendingFile = null;
 
-    // Translation
-    const lang = new URLSearchParams(location.search).get('lang') || 'en';
-    if (lang !== 'en') {
-      document.querySelectorAll('[data-text]').forEach(el => {
-        const text = el.dataset.text;
-        fetch('/translate', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({text, lang})
-        })
-        .then(r => r.json())
-        .then(d => el.innerHTML = d.translated)
-        .catch(() => {});
-      });
-    }
+      const lang = new URLSearchParams(location.search).get('lang') || 'en';
+      const uploadForm = document.getElementById('uploadForm');
+      const recordBtn = document.getElementById('recordBtn');
+      const recordLabel = recordBtn.querySelector('span');
+      const analyzeBtn = document.getElementById('analyzeBtn');
+      const btnText = document.getElementById('btnText');
+      const loadingText = document.getElementById('loadingText');
+      const progressBar = document.getElementById('progressBar');
+      const progressFill = document.getElementById('progressFill');
+      const fileInput = document.getElementById('fileInput');
+      const fileName = document.getElementById('fileName');
+      const audioPreview = document.getElementById('audioPreview');
+      const dropArea = document.getElementById('dropArea');
+      const resultContainer = document.getElementById('resultContainer');
 
-    // Mic recording
-    document.getElementById('recordBtn').onclick = async () => {
-      if (!recorder) {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({audio: true});
-          recorder = new MediaRecorder(stream);
-          const chunks = [];
-          recorder.ondataavailable = e => chunks.push(e.data);
-          recorder.onstop = () => {
-            audioBlob = new Blob(chunks, {type: 'audio/wav'});
-            const url = URL.createObjectURL(audioBlob);
-            document.getElementById('audioPreview').src = url;
-            document.getElementById('audioPreview').style.display = 'block';
-          };
-          recorder.start();
-          document.getElementById('recordBtn').innerHTML = 'Stop';
-        } catch (e) {
-          alert('Mic access denied. Allow HTTPS permission.');
+      const defaultFileLabel = fileName.textContent;
+
+      const applyTranslations = (root = document) => {
+        if (lang === 'en') return;
+        root.querySelectorAll('[data-text]').forEach(el => {
+          if (el.dataset.translated === 'true') return;
+          const text = el.dataset.text;
+          fetch('/translate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({text, lang})
+          })
+          .then(r => r.json())
+          .then(d => {
+            el.innerHTML = d.translated;
+            el.dataset.translated = 'true';
+          })
+          .catch(() => {});
+        });
+      };
+
+      const setAnalyzeEnabled = (enabled) => {
+        analyzeBtn.disabled = !enabled;
+      };
+
+      const resetProgress = () => {
+        if (progressTimer) {
+          clearInterval(progressTimer);
+          progressTimer = null;
         }
-      } else {
-        recorder.stop();
-        recorder.stream.getTracks().forEach(t => t.stop());
-        recorder = null;
-        document.getElementById('recordBtn').innerHTML = 'Record';
-      }
-    };
+        progressFill.style.width = '0%';
+        progressBar.style.display = 'none';
+      };
 
-    // Submit with recorded audio
-    document.getElementById('uploadForm').onsubmit = (e) => {
-      if (audioBlob) {
+      const startProgress = () => {
+        progressBar.style.display = 'block';
+        progressFill.style.width = '20%';
+        let width = 20;
+        progressTimer = setInterval(() => {
+          width = Math.min(width + Math.random() * 15, 90);
+          progressFill.style.width = `${width}%`;
+        }, 500);
+      };
+
+      const finishProgress = () => {
+        progressFill.style.width = '100%';
+        setTimeout(resetProgress, 400);
+      };
+
+      const showLoading = (isLoading) => {
+        btnText.style.display = isLoading ? 'none' : 'inline';
+        loadingText.style.display = isLoading ? 'inline' : 'none';
+        analyzeBtn.disabled = isLoading;
+        if (isLoading) startProgress(); else finishProgress();
+      };
+
+      const clearFileSelection = () => {
+        fileInput.value = '';
+        fileName.textContent = defaultFileLabel;
+        fileName.dataset.translated = 'false';
+        applyTranslations(fileName.parentElement);
+        pendingFile = null;
+      };
+
+      const updateResult = (result) => {
+        if (!result) {
+          resultContainer.innerHTML = '';
+          return;
+        }
+
+        if (result.error) {
+          resultContainer.innerHTML = `
+            <div class="result high">
+              <p data-text="${result.error}">${result.error}</p>
+            </div>
+          `;
+        } else {
+          const riskText = result.risk === 'HIGH'
+            ? 'HIGH RISK — Consult doctor'
+            : 'LOW RISK — Healthy';
+          resultContainer.innerHTML = `
+            <div class="result ${result.risk === 'HIGH' ? 'high' : 'low'}">
+              <p data-text="Risk Score: <strong>${(result.risk_score * 100).toFixed(1)}%</strong>">
+                Risk Score: <strong>${(result.risk_score * 100).toFixed(1)}%</strong>
+              </p>
+              <p data-text="${riskText}">
+                ${riskText}
+              </p>
+            </div>
+          `;
+        }
+        applyTranslations(resultContainer);
+      };
+
+      const setFileFromUpload = (file) => {
+        if (!file) return;
+        audioBlob = null;
+        pendingFile = file;
+        if (typeof DataTransfer !== 'undefined') {
+          try {
+            const dt = new DataTransfer();
+            dt.items.add(file);
+            fileInput.files = dt.files;
+          } catch (err) {
+            // Some browsers (older Safari) do not allow programmatic assignment.
+          }
+        }
+        fileName.textContent = file.name;
+        fileName.dataset.translated = 'false';
+        applyTranslations(fileName.parentElement);
+        audioPreview.style.display = 'none';
+        audioPreview.src = '';
+        setAnalyzeEnabled(true);
+      };
+
+      applyTranslations();
+      setAnalyzeEnabled(false);
+
+      // Drag and click handling
+      dropArea.addEventListener('click', () => fileInput.click());
+
+      ['dragenter', 'dragover'].forEach(evt => {
+        dropArea.addEventListener(evt, (e) => {
+          e.preventDefault();
+          dropArea.classList.add('dragover');
+        });
+      });
+
+      ['dragleave', 'drop'].forEach(evt => {
+        dropArea.addEventListener(evt, (e) => {
+          e.preventDefault();
+          if (evt === 'drop') {
+            const file = e.dataTransfer.files[0];
+            setFileFromUpload(file);
+          }
+          dropArea.classList.remove('dragover');
+        });
+      });
+
+      fileInput.addEventListener('change', () => {
+        const file = fileInput.files[0];
+        if (file) {
+          audioBlob = null;
+          pendingFile = file;
+          fileName.textContent = file.name;
+          fileName.dataset.translated = 'false';
+          applyTranslations(fileName.parentElement);
+          audioPreview.style.display = 'none';
+          audioPreview.src = '';
+          setAnalyzeEnabled(true);
+        } else {
+          setAnalyzeEnabled(!!audioBlob);
+          clearFileSelection();
+        }
+      });
+
+      // Mic recording
+      recordBtn.addEventListener('click', async () => {
+        if (!recorder) {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+            const chunks = [];
+            recorder = new MediaRecorder(stream);
+
+            recorder.ondataavailable = e => chunks.push(e.data);
+            recorder.onstop = () => {
+              audioBlob = new Blob(chunks, {type: 'audio/wav'});
+              const url = URL.createObjectURL(audioBlob);
+              audioPreview.src = url;
+              audioPreview.style.display = 'block';
+              clearFileSelection();
+              setAnalyzeEnabled(true);
+            };
+
+            recorder.start();
+            recordLabel.textContent = 'Stop';
+            recordLabel.dataset.text = 'Stop';
+            recordLabel.dataset.translated = 'false';
+            applyTranslations(recordBtn);
+            setAnalyzeEnabled(false);
+          } catch (e) {
+            alert('Mic access denied. Allow HTTPS permission.');
+          }
+        } else {
+          recorder.stop();
+          recorder.stream.getTracks().forEach(t => t.stop());
+          recorder = null;
+          recordLabel.textContent = 'Record';
+          recordLabel.dataset.text = 'Record';
+          recordLabel.dataset.translated = 'false';
+          applyTranslations(recordBtn);
+        }
+      });
+
+      // Submit handler
+      uploadForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const data = new FormData();
-        data.append('file', audioBlob, 'recording.wav');
-        document.getElementById('btnText').style.display = 'none';
-        document.getElementById('loadingText').style.display = 'inline';
-        document.getElementById('progressBar').style.display = 'block';
-        fetch('/', {method: 'POST', body: data})
-          .then(r => r.text())
-          .then(html => document.body.innerHTML = html);
-      }
-    };
+
+        const formData = new FormData();
+        if (audioBlob) {
+          formData.append('file', audioBlob, 'recording.wav');
+        } else {
+          const selectedFile = pendingFile || (fileInput.files.length > 0 ? fileInput.files[0] : null);
+          if (selectedFile) {
+            formData.append('file', selectedFile);
+          }
+        }
+
+        if (!audioBlob && !formData.has('file')) {
+          updateResult({error: 'No file selected'});
+          return;
+        } else {
+          pendingFile = null;
+        }
+
+        showLoading(true);
+
+        try {
+          const response = await fetch('/', {
+            method: 'POST',
+            body: formData,
+            headers: {'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json'}
+          });
+          const data = await response.json();
+          updateResult(data);
+        } catch (err) {
+          updateResult({error: 'Processing failed'});
+        } finally {
+          showLoading(false);
+        }
+      });
+    });
   </script>
 </body>
 </html>
