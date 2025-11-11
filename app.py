@@ -52,16 +52,17 @@ def process_upload(file):
 
     input_path = output_path = None
     try:
-        # FIXED: Correct indentation + proper temp file
+        # Input file
         suffix = os.path.splitext(file.filename)[1].lower()
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_in:
             file.save(tmp_in.name)
             input_path = tmp_in.name
         print(f"Saved input: {input_path}")
 
-        # Output file
+        # Output file — FIXED: Assign output_path
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_out:
             output_path = tmp_out.name
+        print(f"FFmpeg output: {output_path}")
 
         cmd = ["ffmpeg", "-y", "-i", input_path, "-ar", "22050", "-ac", "1", output_path]
         process = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
