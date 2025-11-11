@@ -3,4 +3,4 @@ services:
     name: parkisons-app
     env: docker
     dockerfilePath: ./Dockerfile
-    startCommand: "python run.py"
+    autoDeploy: true
