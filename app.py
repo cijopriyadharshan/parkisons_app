@@ -79,9 +79,6 @@ def process_upload(file):
         prob = model.predict_proba(X_sel)[0, 1]
         risk = "HIGH" if prob >= threshold else "LOW"
         return {"risk_score": round(prob, 3), "risk": risk}
-    except FileNotFoundError as e:
-        print(f"Processing error: {e}")
-        return {"error": "Processing failed"}
     except subprocess.TimeoutExpired:
         print("FFmpeg timed out")
         return {"error": "Audio processing timed out"}
@@ -93,7 +90,6 @@ def process_upload(file):
             os.unlink(output_path)
         if input_path and os.path.exists(input_path):
             os.unlink(input_path)
-
 
 @app.route("/", methods=["GET", "POST"])
 def index():
