@@ -5,7 +5,8 @@ import tempfile
 import librosa
 import numpy as np
 import joblib
-from flask import Flask, render_template, request, jsonify, send_from_directory
+import requests
+from flask import Flask, render_template, request, jsonify
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from deep_translator import GoogleTranslator
@@ -37,7 +38,7 @@ def extract_features(y, sr):
     full[:len(feats)] = feats
     return full
 
-# === FASTAPI (MOUNTED ON /api) ===
+# === FASTAPI ===
 fastapi_app = FastAPI()
 fastapi_app.add_middleware(CORSMiddleware, allow_origins=["*"])
 
@@ -71,8 +72,14 @@ async def predict(file: UploadFile = File(...)):
     except Exception as e:
         return {"error": str(e)}
 
-# === FLASK (MAIN) ===
+# === FLASK ===
 app = Flask(__name__, template_folder='templates', static_folder='static')
+
+# === DYNAMIC PORT ===
+PORT = int(os.environ.get("PORT", 5000))
+API_URL = f"http://localhost:{PORT}/api/predict"
+
+LANGUAGES = {'en': 'English', 'hi': 'हिंदी', 'ta': 'தமிழ்', 'bn': 'বাংলা'}
 
 @app.route("/", methods=["GET", "POST"])
 def index():
@@ -85,11 +92,11 @@ def index():
         else:
             files = {'file': (file.filename, file.stream, file.content_type)} if file else None
             try:
-                response = requests.post("http://localhost:5000/api/predict", files=files, timeout=30)
+                response = requests.post(API_URL, files=files, timeout=30)
                 result = response.json()
-            except:
+            except Exception as e:
                 result = {"error": "Processing failed"}
-    return render_template("index.html", result=result, lang=lang)
+    return render_template("index.html", result=result, lang=lang, languages=LANGUAGES)
 
 @app.route("/translate", methods=["POST"])
 def translate():
