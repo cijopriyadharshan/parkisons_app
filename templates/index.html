@@ -13,9 +13,7 @@
     .content {padding:2rem;}
     .lang-select {margin-bottom:1rem; text-align:center;}
     select {padding:0.5rem 1rem; border-radius:8px; border:none; background:#f1f1f1;}
-    .upload-area {border:3px dashed #ccc; border-radius:16px; padding:2rem; text-align:center; margin:1rem 0; transition:0.2s ease;}
-    .upload-area.dragover {border-color: var(--primary); background: rgba(0, 122, 204, 0.08);}
-    .file-name {margin-top:0.75rem; font-size:0.9rem; color:#555;}
+    .upload-area {border:3px dashed #ccc; border-radius:16px; padding:2rem; text-align:center; margin:1rem 0;}
     .btn {background:var(--primary); color:white; padding:1rem 2rem; border:none; border-radius:12px; font-size:1.1rem; cursor:pointer; width:100%; margin:1rem 0;}
     .btn:disabled {opacity:0.7;}
     .progress {height:8px; background:#eee; border-radius:4px; overflow:hidden; margin:1rem 0; display:none;}
@@ -168,32 +166,60 @@
       };
 
       const updateResult = (result) => {
-        if (!result) {
-          resultContainer.innerHTML = '';
+        if (!result || typeof result !== 'object') {
+          resultContainer.innerHTML = `<div class="result high"><p data-text="No response from server">No response</p></div>`;
+          applyTranslations(resultContainer);
           return;
         }
+
+        let html = '';
         if (result.error) {
-          resultContainer.innerHTML = `<div class="result high"><p data-text="${result.error}">${result.error}</p></div>`;
-        } else {
+          html = `<div class="result high"><p data-text="${result.error}">${result.error}</p></div>`;
+        } else if (result.risk_score !== undefined && result.risk) {
+          const score = (result.risk_score * 100).toFixed(1);
           const riskText = result.risk === 'HIGH' ? 'HIGH RISK — Consult doctor' : 'LOW RISK — Healthy';
-          resultContainer.innerHTML = `
-            <div class="result ${result.risk === 'HIGH' ? 'high' : 'low'}">
-              <p data-text="Risk Score: <strong>${(result.risk_score * 100).toFixed(1)}%</strong>">
-                Risk Score: <strong>${(result.risk_score * 100).toFixed(1)}%</strong>
+          const cls = result.risk === 'HIGH' ? 'high' : 'low';
+          html = `
+            <div class="result ${cls}">
+              <p data-text="Risk Score: <strong>${score}%</strong>">
+                Risk Score: <strong>${score}%</strong>
               </p>
               <p data-text="${riskText}">${riskText}</p>
             </div>
           `;
+        } else {
+          html = `<div class="result high"><p data-text="Invalid result">Invalid result</p></div>`;
         }
+
+        resultContainer.innerHTML = html;
         applyTranslations(resultContainer);
+      };
+
+      const setFileFromUpload = (file) => {
+        if (!file) return;
+        audioBlob = null;
+        pendingFile = file;
+        fileName.textContent = file.name;
+        fileName.dataset.translated = 'false';
+        applyTranslations(fileName.parentElement);
+        audioPreview.style.display = 'none';
+        audioPreview.src = '';
+        setAnalyzeEnabled(true);
       };
 
       applyTranslations();
       setAnalyzeEnabled(false);
 
       dropArea.addEventListener('click', () => fileInput.click());
-      ['dragenter', 'dragover'].forEach(evt => dropArea.addEventListener(evt, e => { e.preventDefault(); dropArea.classList.add('dragover'); }));
-      ['dragleave', 'drop'].forEach(evt => dropArea.addEventListener(evt, e => { e.preventDefault(); if (evt === 'drop') setFileFromUpload(e.dataTransfer.files[0]); dropArea.classList.remove('dragover'); }));
+      ['dragenter', 'dragover'].forEach(evt => dropArea.addEventListener(evt, (e) => {
+        e.preventDefault();
+        dropArea.classList.add('dragover');
+      }));
+      ['dragleave', 'drop'].forEach(evt => dropArea.addEventListener(evt, (e) => {
+        e.preventDefault();
+        if (evt === 'drop') setFileFromUpload(e.dataTransfer.files[0]);
+        dropArea.classList.remove('dragover');
+      }));
 
       fileInput.addEventListener('change', () => {
         const file = fileInput.files[0];
@@ -220,23 +246,28 @@
             recorder.ondataavailable = e => chunks.push(e.data);
             recorder.onstop = () => {
               audioBlob = new Blob(chunks, {type: 'audio/wav'});
-              audioPreview.src = URL.createObjectURL(audioBlob);
+              const url = URL.createObjectURL(audioBlob);
+              audioPreview.src = url;
               audioPreview.style.display = 'block';
               clearFileSelection();
               setAnalyzeEnabled(true);
             };
             recorder.start();
             recordLabel.textContent = 'Stop';
+            recordLabel.dataset.text = 'Stop';
+            recordLabel.dataset.translated = 'false';
             applyTranslations(recordBtn);
             setAnalyzeEnabled(false);
           } catch (e) {
-            alert('Mic access denied. Allow HTTPS.');
+            alert('Mic access denied. Allow HTTPS permission.');
           }
         } else {
           recorder.stop();
           recorder.stream.getTracks().forEach(t => t.stop());
           recorder = null;
           recordLabel.textContent = 'Record';
+          recordLabel.dataset.text = 'Record';
+          recordLabel.dataset.translated = 'false';
           applyTranslations(recordBtn);
         }
       });
@@ -244,8 +275,14 @@
       uploadForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const formData = new FormData();
-        if (audioBlob) formData.append('file', audioBlob, 'recording.wav');
-        else if (pendingFile || fileInput.files[0]) formData.append('file', pendingFile || fileInput.files[0]);
+        if (audioBlob) {
+          formData.append('file', audioBlob, 'recording.wav');
+        } else {
+          const selectedFile = pendingFile || (fileInput.files.length > 0 ? fileInput.files[0] : null);
+          if (selectedFile) {
+            formData.append('file', selectedFile);
+          }
+        }
 
         if (!formData.has('file')) {
           updateResult({error: 'No file selected'});
@@ -266,9 +303,15 @@
           });
 
           console.log('Status:', response.status);
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          if (!response.ok) {
+            const text = await response.text();
+            console.error("Server error:", text);
+            updateResult({error: `Server error: ${response.status}`});
+            return;
+          }
 
           const data = await response.json();
+          console.log("AI Result:", data);
           updateResult(data);
         } catch (err) {
           console.error('Fetch error:', err);
