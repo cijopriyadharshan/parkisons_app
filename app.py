@@ -52,12 +52,17 @@ def process_upload(file):
 
     input_path = output_path = None
     try:
-        # SAVE FILE TO DISK (FIXED)
-        input_path = tempfile.mktemp(suffix=os.path.splitext(file.filename)[1])
-        file.save(input_path)
+        # FIXED: Correct indentation + proper temp file
+        suffix = os.path.splitext(file.filename)[1].lower()
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_in:
+            file.save(tmp_in.name)
+            input_path = tmp_in.name
         print(f"Saved input: {input_path}")
 
-        output_path = tempfile.mktemp(suffix=".wav")
+        # Output file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_out:
+            output_path = tmp_out.name
+
         cmd = ["ffmpeg", "-y", "-i", input_path, "-ar", "22050", "-ac", "1", output_path]
         process = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         print(f"FFmpeg exit code: {process.returncode}")
@@ -79,6 +84,7 @@ def process_upload(file):
         print(f"Prediction: {prob:.3f} → {risk}")
 
         return {"risk_score": round(prob, 3), "risk": risk}
+
     except subprocess.TimeoutExpired:
         print("FFmpeg timed out")
         return {"error": "Audio processing timed out"}
@@ -95,7 +101,6 @@ def process_upload(file):
                     print(f"Cleaned: {path}")
                 except Exception as e:
                     print(f"Cleanup failed: {e}")
-
 @app.route("/", methods=["GET", "POST"])
 def index():
     lang = request.args.get('lang', 'en')
