@@ -1,12 +1,7 @@
 flask
-fastapi
-uvicorn[standard]
-requests
-joblib
 librosa
 numpy
 scikit-learn
 xgboost
-python-multipart
+joblib
 deep-translator
-werkzeug
