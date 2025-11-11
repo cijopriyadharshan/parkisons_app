@@ -20,8 +20,9 @@ def translate_text(text, target_lang):
     if target_lang == 'en': return text
     try:
         return GoogleTranslator(source='en', target=target_lang).translate(text)
-    except:
-        return text
+    except Exception as e:
+        print(f"Translation failed: {e}")
+        return text  # fallback
 
 # === EXTRACT FEATURES ===
 def extract_features(y, sr):
@@ -38,7 +39,7 @@ def extract_features(y, sr):
 
 # === FLASK APP ===
 app = Flask(__name__, template_folder='templates')
-LANGUAGES = {'en': 'English', 'hi': 'हिंदी', 'ta': 'தமிழ்', 'bn': 'বাংলா'}
+LANGUAGES = {'en': 'English', 'hi': 'हिंदी', 'ta': 'தமிழ்', 'bn': 'বাংলা'}
 
 @app.route("/", methods=["GET", "POST"])
 def index():
@@ -46,10 +47,13 @@ def index():
     result = None
     if request.method == "POST":
         file = request.files.get("file")
-        if file and file.content_length > 50 * 1024 * 1024:
-            result = {"error": "File too large"}
+        if not file or file.filename == '':
+            result = {"error": "No file selected"}
+        elif file.content_length > 50 * 1024 * 1024:
+            result = {"error": "File too large (>50MB)"}
         else:
             try:
+                # Save uploaded file
                 suffix = os.path.splitext(file.filename)[1].lower()
                 with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_in:
                     file.save(tmp_in.name)
@@ -58,15 +62,24 @@ def index():
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_out:
                     output_path = tmp_out.name
 
-                cmd = ["ffmpeg", "-y", "-i", input_path, "-ar", "22050", "-ac", "1", output_path]
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                # FFmpeg command with debug
+                cmd = [
+                    "ffmpeg", "-y", "-i", input_path,
+                    "-ar", "22050", "-ac", "1", "-f", "wav", output_path
+                ]
+                process = subprocess.run(
+                    cmd, capture_output=True, text=True, timeout=30
+                )
                 os.unlink(input_path)
-                if result.returncode != 0:
+
+                if process.returncode != 0:
+                    error_msg = process.stderr or "Unknown FFmpeg error"
+                    print(f"FFmpeg Error: {error_msg}")
                     os.unlink(output_path)
-                    result = {"error": "FFmpeg failed"}
+                    result = {"error": f"FFmpeg failed: {error_msg[:100]}"}
                 else:
                     y, sr = librosa.load(output_path, sr=22050)
-                    y = y[:5 * sr]
+                    y = y[:5 * sr]  # 5 sec max
                     os.unlink(output_path)
 
                     feats = extract_features(y, sr)
@@ -76,13 +89,14 @@ def index():
                     risk = "HIGH" if prob >= threshold else "LOW"
                     result = {"risk_score": round(prob, 3), "risk": risk}
             except Exception as e:
-                result = {"error": str(e)}
+                result = {"error": f"Processing error: {str(e)}"}
     return render_template("index.html", result=result, lang=lang, languages=LANGUAGES)
 
 @app.route("/translate", methods=["POST"])
 def translate():
-    text = request.json['text']
-    target = request.json['lang']
+    data = request.get_json()
+    text = data.get('text', '')
+    target = data.get('lang', 'en')
     return jsonify({"translated": translate_text(text, target)})
 
 if __name__ == "__main__":
