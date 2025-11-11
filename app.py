@@ -21,8 +21,8 @@ def translate_text(text, target_lang):
     try:
         return GoogleTranslator(source='en', target=target_lang).translate(text)
     except Exception as e:
-        print(f"Translation failed: {e}")
-        return text  # fallback
+        print(f"Translation error: {e}")
+        return text
 
 # === EXTRACT FEATURES ===
 def extract_features(y, sr):
@@ -53,7 +53,6 @@ def index():
             result = {"error": "File too large (>50MB)"}
         else:
             try:
-                # Save uploaded file
                 suffix = os.path.splitext(file.filename)[1].lower()
                 with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_in:
                     file.save(tmp_in.name)
@@ -62,24 +61,18 @@ def index():
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_out:
                     output_path = tmp_out.name
 
-                # FFmpeg command with debug
-                cmd = [
-                    "ffmpeg", "-y", "-i", input_path,
-                    "-ar", "22050", "-ac", "1", "-f", "wav", output_path
-                ]
-                process = subprocess.run(
-                    cmd, capture_output=True, text=True, timeout=30
-                )
+                cmd = ["ffmpeg", "-y", "-i", input_path, "-ar", "22050", "-ac", "1", output_path]
+                process = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
                 os.unlink(input_path)
 
                 if process.returncode != 0:
-                    error_msg = process.stderr or "Unknown FFmpeg error"
-                    print(f"FFmpeg Error: {error_msg}")
+                    error = process.stderr.strip() or "Unknown error"
+                    print(f"FFmpeg failed: {error}")
                     os.unlink(output_path)
-                    result = {"error": f"FFmpeg failed: {error_msg[:100]}"}
+                    result = {"error": "Audio format not supported. Try .wav, .mp3, .amr"}
                 else:
                     y, sr = librosa.load(output_path, sr=22050)
-                    y = y[:5 * sr]  # 5 sec max
+                    y = y[:5 * sr]
                     os.unlink(output_path)
 
                     feats = extract_features(y, sr)
@@ -89,16 +82,10 @@ def index():
                     risk = "HIGH" if prob >= threshold else "LOW"
                     result = {"risk_score": round(prob, 3), "risk": risk}
             except Exception as e:
-                result = {"error": f"Processing error: {str(e)}"}
+                result = {"error": "Processing failed"}
     return render_template("index.html", result=result, lang=lang, languages=LANGUAGES)
 
 @app.route("/translate", methods=["POST"])
 def translate():
     data = request.get_json()
-    text = data.get('text', '')
-    target = data.get('lang', 'en')
-    return jsonify({"translated": translate_text(text, target)})
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=False)
+    return jsonify({"translated": translate_text(data.get('text', ''), data.get('lang', 'en'))})
