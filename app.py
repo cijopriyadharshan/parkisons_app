@@ -9,16 +9,11 @@ from flask import Flask, render_template, request, jsonify
 from deep_translator import GoogleTranslator
 
 # === LOAD MODEL ===
-try:
-    artifacts = joblib.load('parkinsons_final.pkl')
-    model = artifacts['model']
-    scaler = artifacts['scaler']
-    selector = artifacts['selector']
-    threshold = artifacts['threshold']
-    print("Model loaded successfully")
-except Exception as e:
-    print(f"MODEL LOAD FAILED: {e}")
-    model = scaler = selector = threshold = None
+artifacts = joblib.load('parkinsons_final.pkl')
+model = artifacts['model']
+scaler = artifacts['scaler']
+selector = artifacts['selector']
+threshold = artifacts['threshold']
 
 # === TRANSLATOR ===
 def translate_text(text, target_lang):
@@ -32,25 +27,23 @@ def translate_text(text, target_lang):
 # === EXTRACT FEATURES ===
 def extract_features(y, sr):
     if len(y) == 0: return np.zeros(752)
-    try:
-        mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
-        mfcc_mean = mfcc.mean(axis=1)
-        mfcc_std = mfcc.std(axis=1)
-        zcr = librosa.feature.zero_crossing_rate(y)[0].mean()
-        rms = librosa.feature.rms(y=y)[0].mean()
-        feats = np.concatenate([mfcc_mean, mfcc_std, [zcr, rms]])
-        full = np.zeros(752)
-        full[:len(feats)] = feats
-        return full
-    except Exception as e:
-        print(f"Feature extraction failed: {e}")
-        return np.zeros(752)
+    mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
+    mfcc_mean = mfcc.mean(axis=1)
+    mfcc_std = mfcc.std(axis=1)
+    zcr = librosa.feature.zero_crossing_rate(y)[0].mean()
+    rms = librosa.feature.rms(y=y)[0].mean()
+    feats = np.concatenate([mfcc_mean, mfcc_std, [zcr, rms]])
+    full = np.zeros(752)
+    full[:len(feats)] = feats
+    return full
 
 # === FLASK APP ===
 app = Flask(__name__, template_folder='templates')
 LANGUAGES = {'en': 'English', 'hi': 'हिंदी', 'ta': 'தமிழ்', 'bn': 'বাংলা'}
 
 def process_upload(file):
+    print(f"Processing file: {file.filename} ({file.content_length} bytes)")
+    
     if not file or file.filename == '':
         return {"error": "No file selected"}
 
@@ -59,31 +52,24 @@ def process_upload(file):
 
     input_path = output_path = None
     try:
-        suffix = os.path.splitext(file.filename)[1].lower()
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_in:
-            file.save(tmp_in.name)
-            input_path = tmp_in.name
+        # SAVE FILE TO DISK (FIXED)
+        input_path = tempfile.mktemp(suffix=os.path.splitext(file.filename)[1])
+        file.save(input_path)
+        print(f"Saved input: {input_path}")
 
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_out:
-            output_path = tmp_out.name
-
+        output_path = tempfile.mktemp(suffix=".wav")
         cmd = ["ffmpeg", "-y", "-i", input_path, "-ar", "22050", "-ac", "1", output_path]
         process = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-
-        if input_path and os.path.exists(input_path):
-            os.unlink(input_path)
+        print(f"FFmpeg exit code: {process.returncode}")
 
         if process.returncode != 0:
-            error_msg = process.stderr.strip() or "Unknown FFmpeg error"
-            print(f"FFmpeg failed: {error_msg}")
-            if output_path and os.path.exists(output_path):
-                os.unlink(output_path)
-            return {"error": "Unsupported audio format. Try .wav, .mp3, .amr"}
+            error = process.stderr.strip() or "Unknown error"
+            print(f"FFmpeg error: {error}")
+            return {"error": "Unsupported audio format"}
 
         y, sr = librosa.load(output_path, sr=22050)
         y = y[:5 * sr]
-        if output_path and os.path.exists(output_path):
-            os.unlink(output_path)
+        print(f"Audio loaded: {len(y)} samples")
 
         feats = extract_features(y, sr)
         X = scaler.transform([feats])
@@ -91,13 +77,13 @@ def process_upload(file):
         prob = model.predict_proba(X_sel)[0, 1]
         risk = "HIGH" if prob >= threshold else "LOW"
         print(f"Prediction: {prob:.3f} → {risk}")
-        return {"risk_score": round(prob, 3), "risk": risk}
 
+        return {"risk_score": round(prob, 3), "risk": risk}
     except subprocess.TimeoutExpired:
         print("FFmpeg timed out")
         return {"error": "Audio processing timed out"}
     except Exception as e:
-        print(f"CRITICAL ERROR in process_upload: {e}")
+        print(f"CRITICAL ERROR: {e}")
         import traceback
         traceback.print_exc()
         return {"error": "Processing failed"}
@@ -106,8 +92,9 @@ def process_upload(file):
             if path and os.path.exists(path):
                 try:
                     os.unlink(path)
-                except:
-                    pass
+                    print(f"Cleaned: {path}")
+                except Exception as e:
+                    print(f"Cleanup failed: {e}")
 
 @app.route("/", methods=["GET", "POST"])
 def index():
@@ -118,9 +105,12 @@ def index():
     if request.method == "POST":
         result = process_upload(request.files.get("file"))
         if result is None:
-            result = {"error": "Internal server error"}
+            result = {"error": "Internal error"}
         status = 400 if result.get("error") else 200
-        return jsonify(result), status  # ALWAYS JSON, NEVER None
+        wants_json = request.headers.get("X-Requested-With") == "XMLHttpRequest" or \
+            "application/json" in request.headers.get("Accept", "")
+        if wants_json:
+            return jsonify(result), status
 
     return render_template("index.html", result=result, lang=lang, languages=LANGUAGES), status
 
