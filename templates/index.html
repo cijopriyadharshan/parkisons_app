@@ -28,8 +28,8 @@
 <body>
   <div class="container">
     <div class="header">
-      <h1>Parkinson Detector</h1>
-      <p>Upload or record voice • Result in <25s</p>
+      <h1 data-text="Parkinson Detector">Parkinson Detector</h1>
+      <p data-text="Upload or record voice • Result in &lt;25s">Upload or record voice • Result in &lt;25s</p>
     </div>
 
     <div class="content">
@@ -43,18 +43,18 @@
 
       <form method="post" enctype="multipart/form-data" id="uploadForm">
         <div class="upload-area" id="dropArea">
-          <p>Drop file or click</p>
+          <p data-text="Drop file or click (AMR, MP3, WAV)">Drop file or click (AMR, MP3, WAV)</p>
           <input type="file" name="file" accept="audio/*" id="fileInput" style="display:none"/>
         </div>
 
         <button type="button" class="btn mic-btn" id="recordBtn">
-          Record
+          <span data-text="Record">Record</span>
         </button>
         <audio id="audioPreview" controls style="display:none"></audio>
 
         <button type="submit" class="btn" id="analyzeBtn">
-          <span id="btnText">Analyze</span>
-          <span id="loadingText" style="display:none">Processing...</span>
+          <span id="btnText" data-text="Analyze">Analyze</span>
+          <span id="loadingText" style="display:none" data-text="Processing...">Processing...</span>
         </button>
 
         <div class="progress" id="progressBar">
@@ -65,10 +65,14 @@
       {% if result %}
         <div class="result {% if result.risk == 'HIGH' %}high{% else %}low{% endif %}">
           {% if result.error %}
-            <p>{{ result.error }}</p>
+            <p data-text="{{ result.error }}">{{ result.error }}</p>
           {% else %}
-            <p>Risk Score: <strong>{{ "%.1f"|format(result.risk_score * 100) }}%</strong></p>
-            <p>{% if result.risk == 'HIGH' %}HIGH RISK — Consult doctor{% else %}LOW RISK — Healthy{% endif %}</p>
+            <p data-text="Risk Score: <strong>{{ "%.1f"|format(result.risk_score * 100) }}%</strong>">
+              Risk Score: <strong>{{ "%.1f"|format(result.risk_score * 100) }}%</strong>
+            </p>
+            <p data-text="{% if result.risk == 'HIGH' %}HIGH RISK — Consult doctor{% else %}LOW RISK — Healthy{% endif %}">
+              {% if result.risk == 'HIGH' %}HIGH RISK — Consult doctor{% else %}LOW RISK — Healthy{% endif %}
+            </p>
           {% endif %}
         </div>
       {% endif %}
@@ -76,7 +80,7 @@
   </div>
 
   <script>
-    // Language translate
+    // Translation
     const lang = new URLSearchParams(location.search).get('lang') || 'en';
     if (lang !== 'en') {
       document.querySelectorAll('[data-text]').forEach(el => {
@@ -106,11 +110,6 @@
             const url = URL.createObjectURL(audioBlob);
             document.getElementById('audioPreview').src = url;
             document.getElementById('audioPreview').style.display = 'block';
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.name = 'file';
-            input.files = new File([audioBlob], 'recording.wav', {type: 'audio/wav'});
-            document.getElementById('uploadForm').appendChild(input);
           };
           recorder.start();
           document.getElementById('recordBtn').innerHTML = 'Stop';
@@ -125,17 +124,15 @@
       }
     };
 
-    // Progress bar
-    document.getElementById('uploadForm').onsubmit = () => {
-      document.getElementById('btnText').style.display = 'none';
-      document.getElementById('loadingText').style.display = 'inline';
-      document.getElementById('progressBar').style.display = 'block';
-      let width = 0;
-      const interval = setInterval(() => {
-        width += 5;
-        document.getElementById('progressFill').style.width = width + '%';
-        if (width >= 100) clearInterval(interval);
-      }, 1000);
+    // Submit recorded audio
+    document.getElementById('uploadForm').onsubmit = (e) => {
+      if (audioBlob) {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.name = 'file';
+        input.files = new FileList([audioBlob], 'recording.wav');
+        e.target.appendChild(input);
+      }
     };
   </script>
 </body>
