@@ -132,10 +132,7 @@
       };
 
       const resetProgress = () => {
-        if (progressTimer) {
-          clearInterval(progressTimer);
-          progressTimer = null;
-        }
+        if (progressTimer) clearInterval(progressTimer);
         progressFill.style.width = '0%';
         progressBar.style.display = 'none';
       };
@@ -175,72 +172,28 @@
           resultContainer.innerHTML = '';
           return;
         }
-
         if (result.error) {
-          resultContainer.innerHTML = `
-            <div class="result high">
-              <p data-text="${result.error}">${result.error}</p>
-            </div>
-          `;
+          resultContainer.innerHTML = `<div class="result high"><p data-text="${result.error}">${result.error}</p></div>`;
         } else {
-          const riskText = result.risk === 'HIGH'
-            ? 'HIGH RISK — Consult doctor'
-            : 'LOW RISK — Healthy';
+          const riskText = result.risk === 'HIGH' ? 'HIGH RISK — Consult doctor' : 'LOW RISK — Healthy';
           resultContainer.innerHTML = `
             <div class="result ${result.risk === 'HIGH' ? 'high' : 'low'}">
               <p data-text="Risk Score: <strong>${(result.risk_score * 100).toFixed(1)}%</strong>">
                 Risk Score: <strong>${(result.risk_score * 100).toFixed(1)}%</strong>
               </p>
-              <p data-text="${riskText}">
-                ${riskText}
-              </p>
+              <p data-text="${riskText}">${riskText}</p>
             </div>
           `;
         }
         applyTranslations(resultContainer);
       };
 
-      const setFileFromUpload = (file) => {
-        if (!file) return;
-        audioBlob = null;
-        pendingFile = file;
-        if (typeof DataTransfer !== 'undefined') {
-          try {
-            const dt = new DataTransfer();
-            dt.items.add(file);
-            fileInput.files = dt.files;
-          } catch (err) {}
-        }
-        fileName.textContent = file.name;
-        fileName.dataset.translated = 'false';
-        applyTranslations(fileName.parentElement);
-        audioPreview.style.display = 'none';
-        audioPreview.src = '';
-        setAnalyzeEnabled(true);
-      };
-
       applyTranslations();
       setAnalyzeEnabled(false);
 
       dropArea.addEventListener('click', () => fileInput.click());
-
-      ['dragenter', 'dragover'].forEach(evt => {
-        dropArea.addEventListener(evt, (e) => {
-          e.preventDefault();
-          dropArea.classList.add('dragover');
-        });
-      });
-
-      ['dragleave', 'drop'].forEach(evt => {
-        dropArea.addEventListener(evt, (e) => {
-          e.preventDefault();
-          if (evt === 'drop') {
-            const file = e.dataTransfer.files[0];
-            setFileFromUpload(file);
-          }
-          dropArea.classList.remove('dragover');
-        });
-      });
+      ['dragenter', 'dragover'].forEach(evt => dropArea.addEventListener(evt, e => { e.preventDefault(); dropArea.classList.add('dragover'); }));
+      ['dragleave', 'drop'].forEach(evt => dropArea.addEventListener(evt, e => { e.preventDefault(); if (evt === 'drop') setFileFromUpload(e.dataTransfer.files[0]); dropArea.classList.remove('dragover'); }));
 
       fileInput.addEventListener('change', () => {
         const file = fileInput.files[0];
@@ -251,7 +204,6 @@
           fileName.dataset.translated = 'false';
           applyTranslations(fileName.parentElement);
           audioPreview.style.display = 'none';
-          audioPreview.src = '';
           setAnalyzeEnabled(true);
         } else {
           setAnalyzeEnabled(!!audioBlob);
@@ -265,56 +217,41 @@
             const stream = await navigator.mediaDevices.getUserMedia({audio: true});
             const chunks = [];
             recorder = new MediaRecorder(stream);
-
             recorder.ondataavailable = e => chunks.push(e.data);
             recorder.onstop = () => {
               audioBlob = new Blob(chunks, {type: 'audio/wav'});
-              const url = URL.createObjectURL(audioBlob);
-              audioPreview.src = url;
+              audioPreview.src = URL.createObjectURL(audioBlob);
               audioPreview.style.display = 'block';
               clearFileSelection();
               setAnalyzeEnabled(true);
             };
-
             recorder.start();
             recordLabel.textContent = 'Stop';
-            recordLabel.dataset.text = 'Stop';
-            recordLabel.dataset.translated = 'false';
             applyTranslations(recordBtn);
             setAnalyzeEnabled(false);
           } catch (e) {
-            alert('Mic access denied. Allow HTTPS permission.');
+            alert('Mic access denied. Allow HTTPS.');
           }
         } else {
           recorder.stop();
           recorder.stream.getTracks().forEach(t => t.stop());
           recorder = null;
           recordLabel.textContent = 'Record';
-          recordLabel.dataset.text = 'Record';
-          recordLabel.dataset.translated = 'false';
           applyTranslations(recordBtn);
         }
       });
 
       uploadForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-
         const formData = new FormData();
-        if (audioBlob) {
-          formData.append('file', audioBlob, 'recording.wav');
-        } else {
-          const selectedFile = pendingFile || (fileInput.files.length > 0 ? fileInput.files[0] : null);
-          if (selectedFile) {
-            formData.append('file', selectedFile);
-          }
-        }
+        if (audioBlob) formData.append('file', audioBlob, 'recording.wav');
+        else if (pendingFile || fileInput.files[0]) formData.append('file', pendingFile || fileInput.files[0]);
 
-        if (!audioBlob && !formData.has('file')) {
+        if (!formData.has('file')) {
           updateResult({error: 'No file selected'});
           return;
-        } else {
-          pendingFile = null;
         }
+        pendingFile = null;
 
         showLoading(true);
 
@@ -327,10 +264,15 @@
               'Accept': 'application/json'
             }
           });
+
+          console.log('Status:', response.status);
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
           const data = await response.json();
           updateResult(data);
         } catch (err) {
-          updateResult({error: 'Processing failed'});
+          console.error('Fetch error:', err);
+          updateResult({error: 'Network or server error'});
         } finally {
           showLoading(false);
         }
