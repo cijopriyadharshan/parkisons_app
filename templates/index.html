@@ -209,9 +209,7 @@
             const dt = new DataTransfer();
             dt.items.add(file);
             fileInput.files = dt.files;
-          } catch (err) {
-            // Some browsers (older Safari) do not allow programmatic assignment.
-          }
+          } catch (err) {}
         }
         fileName.textContent = file.name;
         fileName.dataset.translated = 'false';
@@ -224,7 +222,6 @@
       applyTranslations();
       setAnalyzeEnabled(false);
 
-      // Drag and click handling
       dropArea.addEventListener('click', () => fileInput.click());
 
       ['dragenter', 'dragover'].forEach(evt => {
@@ -262,7 +259,6 @@
         }
       });
 
-      // Mic recording
       recordBtn.addEventListener('click', async () => {
         if (!recorder) {
           try {
@@ -300,7 +296,6 @@
         }
       });
 
-      // Submit handler
       uploadForm.addEventListener('submit', async (e) => {
         e.preventDefault();
 
@@ -327,7 +322,10 @@
           const response = await fetch('/', {
             method: 'POST',
             body: formData,
-            headers: {'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json'}
+            headers: {
+              'X-Requested-With': 'XMLHttpRequest',
+              'Accept': 'application/json'
+            }
           });
           const data = await response.json();
           updateResult(data);
